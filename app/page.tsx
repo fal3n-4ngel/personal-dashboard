@@ -61,6 +61,18 @@ interface Subscription {
   createdAt: number;
 }
 
+interface InvestmentAsset {
+  id: string;
+  name: string;
+  category: "equity" | "crypto" | "mutual_fund" | "gold" | "cash" | "other";
+  amount: number;
+  quantity?: number;
+  buyPrice?: number;
+  currentPrice?: number;
+  notes?: string;
+  createdAt: number;
+}
+
 interface Habit {
   id: string;
   name: string;
@@ -170,7 +182,7 @@ export default function Dashboard() {
   const [traktSyncMsg, setTraktSyncMsg] = useState("");
 
   /* ─── Navigation ─── */
-  const [activeTab, setActiveTab] = useState<"expenses" | "subscriptions" | "habits" | "media" | "books" | "goals" | "notes">("expenses");
+  const [activeTab, setActiveTab] = useState<"expenses" | "subscriptions" | "habits" | "media" | "books" | "goals" | "notes" | "investments">("expenses");
 
   /* ─── State for New Features ─── */
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -209,6 +221,25 @@ export default function Dashboard() {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const saveNoteTimeout = useRef<NodeJS.Timeout | null>(null);
   const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("all");
+  const [expenseMinAmount, setExpenseMinAmount] = useState("");
+  const [expenseMaxAmount, setExpenseMaxAmount] = useState("");
+  const [currency, setCurrency] = useState("₹");
+
+  /* ─── Investments State ─── */
+  const [investments, setInvestments] = useState<InvestmentAsset[]>([]);
+  const [showInvestmentsTab, setShowInvestmentsTab] = useState(true);
+  const [isFetchingInvestments, setIsFetchingInvestments] = useState(false);
+  const [isAddingInvestment, setIsAddingInvestment] = useState(false);
+  const [invName, setInvName] = useState("");
+  const [invCategory, setInvCategory] = useState<InvestmentAsset["category"]>("equity");
+  const [invAmount, setInvAmount] = useState("");
+  const [invQty, setInvQty] = useState("");
+  const [invBuyPrice, setInvBuyPrice] = useState("");
+  const [invCurrentPrice, setInvCurrentPrice] = useState("");
+  const [invNotes, setInvNotes] = useState("");
+  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+  const [priceUpdateMsg, setPriceUpdateMsg] = useState("");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [newCategoryInput, setNewCategoryInput] = useState("");
   const [isAddingExpense, setIsAddingExpense] = useState(false);
@@ -333,6 +364,49 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [firebaseAuth, user]);
 
+  /* ─── Currency auto-detection on mount ─── */
+  useEffect(() => {
+    const saved = localStorage.getItem("preferred_currency");
+    if (saved) {
+      setCurrency(saved);
+    } else {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        if (tz.includes("Kolkata") || tz.includes("India")) {
+          setCurrency("₹");
+        } else if (tz.includes("Europe")) {
+          setCurrency("€");
+        } else if (tz.includes("London") || tz.includes("GB")) {
+          setCurrency("£");
+        } else {
+          setCurrency("$");
+        }
+      } catch {
+        setCurrency("$");
+      }
+    }
+  }, []);
+
+  /* ─── Fetch Vercel Feature Flags on mount ─── */
+  useEffect(() => {
+    fetch("/api/flags")
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.enableInvestmentPortfolios === "boolean") {
+          console.log("Feature Flag enableInvestmentPortfolios: ",data.enableInvestmentPortfolios)
+          setShowInvestmentsTab(data.enableInvestmentPortfolios);
+        }
+      })
+      .catch(err => console.error("Error fetching feature flags:", err));
+  }, []);
+
+  /* ─── Redirect if flag is disabled ─── */
+  useEffect(() => {
+    if (!showInvestmentsTab && activeTab === "investments") {
+      setActiveTab("expenses");
+    }
+  }, [showInvestmentsTab, activeTab]);
+
   /* ─── Fetch data once when user logs in (expenseSearch is filtered client-side, not refetched) ─── */
   useEffect(() => {
     if (user) { 
@@ -340,6 +414,7 @@ export default function Dashboard() {
       fetchWatchlist();
       fetchSubscriptions();
       fetchNote();
+      fetchInvestments();
     }
   }, [user]);
 
@@ -738,6 +813,97 @@ export default function Dashboard() {
     }, 1000);
   };
 
+  /* ─── Investments Handlers ─── */
+  const fetchInvestments = async () => {
+    setIsFetchingInvestments(true);
+    try {
+      const res = await fetch("/api/portfolio", { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setInvestments(data.assets || []);
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsFetchingInvestments(false); }
+  };
+
+  const saveInvestments = async (updatedList: InvestmentAsset[]) => {
+    try {
+      await fetch("/api/portfolio", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ assets: updatedList }),
+      });
+    } catch (err) { console.error(err); }
+  };
+
+  const addInvestment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invName || !invAmount) return;
+    setIsAddingInvestment(true);
+    const newAsset = {
+      id: crypto.randomUUID(),
+      name: invName,
+      category: invCategory,
+      amount: Number(invAmount),
+      quantity: invQty ? Number(invQty) : undefined,
+      buyPrice: invBuyPrice ? Number(invBuyPrice) : undefined,
+      currentPrice: invCurrentPrice ? Number(invCurrentPrice) : undefined,
+      notes: invNotes || undefined,
+      createdAt: Date.now(),
+    };
+    const updatedList = [...investments, newAsset];
+    setInvestments(updatedList);
+    await saveInvestments(updatedList);
+    setInvName("");
+    setInvAmount("");
+    setInvQty("");
+    setInvBuyPrice("");
+    setInvCurrentPrice("");
+    setInvNotes("");
+    setIsAddingInvestment(false);
+  };
+
+  const deleteInvestment = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this asset?")) return;
+    const updatedList = investments.filter((a) => a.id !== id);
+    setInvestments(updatedList);
+    await saveInvestments(updatedList);
+  };
+
+  const updateMarketPrices = async () => {
+    setIsUpdatingPrices(true);
+    setPriceUpdateMsg("Fetching market updates...");
+    setTimeout(async () => {
+      const updated = investments.map(asset => {
+        if (asset.category === "crypto") {
+          const pct = 1 + (Math.random() * 0.12 - 0.05);
+          const current = asset.currentPrice || asset.buyPrice || (asset.amount / (asset.quantity || 1));
+          const newPrice = Math.round(current * pct * 100) / 100;
+          return {
+            ...asset,
+            currentPrice: newPrice,
+            amount: Math.round(newPrice * (asset.quantity || 1))
+          };
+        } else if (asset.category === "equity" || asset.category === "mutual_fund") {
+          const pct = 1 + (Math.random() * 0.06 - 0.02);
+          const current = asset.currentPrice || asset.buyPrice || (asset.amount / (asset.quantity || 1));
+          const newPrice = Math.round(current * pct * 100) / 100;
+          return {
+            ...asset,
+            currentPrice: newPrice,
+            amount: Math.round(newPrice * (asset.quantity || 1))
+          };
+        }
+        return asset;
+      });
+      setInvestments(updated);
+      await saveInvestments(updated);
+      setIsUpdatingPrices(false);
+      setPriceUpdateMsg("Simulated market rates updated successfully!");
+      setTimeout(() => setPriceUpdateMsg(""), 3000);
+    }, 1200);
+  };
+
   /* ─── Watchlist API ─── */
   const fetchWatchlist = async () => {
     setIsFetchingWatchlist(true);
@@ -1037,6 +1203,24 @@ export default function Dashboard() {
       );
     }
 
+    if (expenseCategoryFilter !== "all") {
+      list = list.filter((e) => e.category === expenseCategoryFilter);
+    }
+
+    if (expenseMinAmount.trim()) {
+      const minVal = Number(expenseMinAmount);
+      if (!isNaN(minVal)) {
+        list = list.filter((e) => (e.amount || 0) >= minVal);
+      }
+    }
+
+    if (expenseMaxAmount.trim()) {
+      const maxVal = Number(expenseMaxAmount);
+      if (!isNaN(maxVal)) {
+        list = list.filter((e) => (e.amount || 0) <= maxVal);
+      }
+    }
+
     return list;
   })();
 
@@ -1186,7 +1370,7 @@ export default function Dashboard() {
               <rect x="1.6" y="11.2" width="7.2" height="7.2" rx="1.8" fill="var(--text-primary)" opacity="0.55" />
               <rect x="11.2" y="11.2" width="7.2" height="7.2" rx="1.8" fill="var(--text-primary)" opacity="0.85" />
             </svg>
-            <span style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-0.5px" }}>Phub Dashboard</span>
+            <span style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-0.5px" }}>PHub Dashboard</span>
           </div>
           <nav>
             <div onClick={() => setActiveTab("expenses")} className={`nav-link ${activeTab === "expenses" ? "active" : ""}`}>
@@ -1205,6 +1389,12 @@ export default function Dashboard() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               Quick Notes
             </div>
+            {showInvestmentsTab && (
+              <div onClick={() => setActiveTab("investments")} className={`nav-link ${activeTab === "investments" ? "active" : ""}`}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Investments
+              </div>
+            )}
           </nav>
 
 
@@ -1287,6 +1477,17 @@ export default function Dashboard() {
               <span style={{ fontWeight: 600 }}>Firestore</span>
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#22c55e" }}></span>
               <span style={{ color: "#22c55e", fontWeight: 600 }}>Active</span>
+            </div>
+            <div style={{ backgroundColor: "#fff", border: "1px solid var(--border-subtle)", borderRadius: "6px", padding: "4px 10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px" }}>
+              <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>CURRENCY</span>
+              <select value={currency} onChange={(e) => { setCurrency(e.target.value); localStorage.setItem("preferred_currency", e.target.value); }} style={{ border: "none", background: "transparent", fontWeight: 600, outline: "none", cursor: "pointer", fontSize: "11px" }}>
+                <option value="₹">INR (₹)</option>
+                <option value="$">USD ($)</option>
+                <option value="€">EUR (€)</option>
+                <option value="£">GBP (£)</option>
+                <option value="¥">JPY (¥)</option>
+                <option value="₩">KRW (₩)</option>
+              </select>
             </div>
             {anilistUser && (
               <div style={{ backgroundColor: "#fff", border: "1px solid var(--border-subtle)", borderRadius: "6px", padding: "6px 12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "11px" }}>
@@ -1424,9 +1625,9 @@ export default function Dashboard() {
         {activeTab === "expenses" && expenseTab === "ledger" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "28px" }} className="animate-fade-in">
             <div className="responsive-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-              <div className="stat-card"><span className="label-mono">Total Spent</span><span className="stat-value">₹{totalSpent.toLocaleString("en-IN")}</span><span className="stat-subtext">{timeFilter === "all" ? "All time" : `Last ${timeFilter} days`}</span></div>
+              <div className="stat-card"><span className="label-mono">Total Spent</span><span className="stat-value">{currency}{totalSpent.toLocaleString()}</span><span className="stat-subtext">{timeFilter === "all" ? "All time" : `Last ${timeFilter} days`}</span></div>
               <div className="stat-card"><span className="label-mono">Charges Logged</span><span className="stat-value" style={{ color: "#b3666b" }}>{filteredExpenses.length}</span><span className="stat-subtext">Transactions</span></div>
-              <div className="stat-card"><span className="label-mono">Largest Charge</span><span className="stat-value" style={{ color: "#e39282", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>₹{largestCharge.toLocaleString("en-IN")}</span><span className="stat-subtext" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{largestItem?.title || "—"}</span></div>
+              <div className="stat-card"><span className="label-mono">Largest Charge</span><span className="stat-value" style={{ color: "#e39282", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currency}{largestCharge.toLocaleString()}</span><span className="stat-subtext" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{largestItem?.title || "—"}</span></div>
               <div className="stat-card"><span className="label-mono">Top Category</span><span className="stat-value" style={{ fontSize: "22px", marginTop: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{topCategory}</span><span className="stat-subtext">Highest share</span></div>
             </div>
 
@@ -1480,7 +1681,7 @@ export default function Dashboard() {
                     const colors = ["#b3666b", "#e39282", "#1c1b18", "#6e6c64", "#d1b89a", "#eae8e0", "#9c9a92", "#c4c2ba"];
                     return (
                       <div key={cat} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", minWidth: "52px", maxWidth: "68px", flexShrink: 0, flex: 1 }}>
-                        <span style={{ fontSize: "9.5px", fontWeight: 600, color: "var(--text-secondary)" }}>₹{(total/1000).toFixed(0)}k</span>
+                        <span style={{ fontSize: "9.5px", fontWeight: 600, color: "var(--text-secondary)" }}>{currency}{(total/1000).toFixed(0)}k</span>
                         <div className="chart-bar-container" style={{ width: "20px", height: "140px", display: "flex", alignItems: "flex-end", backgroundColor: "var(--bg-secondary)", borderRadius: "4px 4px 0 0" }}>
                           <div style={{ width: "100%", height: `${pct}%`, backgroundColor: colors[idx % colors.length], borderRadius: "4px 4px 0 0", transition: "height 0.5s ease" }}></div>
                         </div>
@@ -1499,7 +1700,7 @@ export default function Dashboard() {
                     const dateFormatted = dateParts.length === 3 ? `${dateParts[1]}/${dateParts[2]}` : date;
                     return (
                       <div key={date} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", minWidth: "52px", maxWidth: "68px", flexShrink: 0, flex: 1 }}>
-                        <span style={{ fontSize: "9.5px", fontWeight: 600, color: "var(--text-secondary)" }}>₹{total.toLocaleString("en-IN")}</span>
+                        <span style={{ fontSize: "9.5px", fontWeight: 600, color: "var(--text-secondary)" }}>{currency}{total.toLocaleString()}</span>
                         <div className="chart-bar-container" style={{ width: "20px", height: "140px", display: "flex", alignItems: "flex-end", backgroundColor: "var(--bg-secondary)", borderRadius: "4px 4px 0 0" }}>
                           <div style={{ width: "100%", height: `${pct}%`, backgroundColor: "#3b82f6", borderRadius: "4px 4px 0 0", transition: "height 0.5s ease" }}></div>
                         </div>
@@ -1519,7 +1720,7 @@ export default function Dashboard() {
                   <span className="label-mono" style={{ marginBottom: "14px", display: "block" }}>Log Transaction</span>
                   <form onSubmit={addExpense} style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
                     <input type="text" value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="Description" required />
-                    <input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="Amount (₹)" required />
+                    <input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder={`Amount (${currency})`} required />
                     
                     <select value={expenseCategory} onChange={(e) => setExpenseCategory(e.target.value)} required style={{ width: "100%" }}>
                       <option value="">Select Category</option>
@@ -1583,9 +1784,35 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="bento-card" style={{ display: "flex", flexDirection: "column", gap: "16px", height: "550px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", flexShrink: 0 }}>
                   <span className="label-mono">Ledger Sheet</span>
-                  <input type="text" value={expenseSearch} onChange={(e) => setExpenseSearch(e.target.value)} placeholder="Search..." style={{ fontSize: "12px", padding: "6px 12px", width: "180px" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <input type="text" value={expenseSearch} onChange={(e) => setExpenseSearch(e.target.value)} placeholder="Search..." style={{ fontSize: "12px", padding: "6px 12px", width: "130px" }} />
+                    <select
+                      value={expenseCategoryFilter}
+                      onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                      style={{ fontSize: "12px", padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", backgroundColor: "#fff" }}
+                    >
+                      <option value="all">All Categories</option>
+                      {Array.from(new Set(expenses.map(e => e.category).filter(Boolean))).map(cat => (
+                        <option key={cat} value={cat!}>{cat}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder={`Min (${currency})`}
+                      value={expenseMinAmount}
+                      onChange={(e) => setExpenseMinAmount(e.target.value)}
+                      style={{ fontSize: "12px", padding: "6px 10px", width: "75px" }}
+                    />
+                    <input
+                      type="number"
+                      placeholder={`Max (${currency})`}
+                      value={expenseMaxAmount}
+                      onChange={(e) => setExpenseMaxAmount(e.target.value)}
+                      style={{ fontSize: "12px", padding: "6px 10px", width: "75px" }}
+                    />
+                  </div>
                 </div>
                 <div style={{ overflowY: "auto", overflowX: "auto", flex: 1, paddingRight: "4px" }}>
                   {isFetchingExpenses ? <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px", fontSize: "13px" }}>Loading...</p> : (
@@ -1605,7 +1832,7 @@ export default function Dashboard() {
                             <td style={{ padding: "11px 0", fontWeight: 500 }}>{e.title}</td>
                             <td style={{ padding: "11px 0" }}>{e.category ? <span style={{ backgroundColor: "var(--bg-secondary)", padding: "2px 8px", borderRadius: "9999px", fontSize: "11px" }}>{e.category}</span> : <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                             <td style={{ padding: "11px 0", color: "var(--text-secondary)" }}>{e.date || "—"}</td>
-                            <td style={{ padding: "11px 0", textAlign: "right", fontWeight: 600 }}>₹{(e.amount || 0).toLocaleString("en-IN")}</td>
+                            <td style={{ padding: "11px 0", textAlign: "right", fontWeight: 600 }}>{currency}{(e.amount || 0).toLocaleString()}</td>
                             <td style={{ padding: "11px 0", textAlign: "center" }}><button onClick={() => archiveExpenseItem(e.id)} style={{ backgroundColor: "transparent", color: "#ef4444", fontSize: "11px", padding: "2px 8px" }}>Archive</button></td>
                           </tr>
                         ))}
@@ -2055,7 +2282,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
                       <div style={{ textAlign: "right" }}>
-                        <p style={{ fontWeight: 700, fontSize: "15px" }}>${sub.cost.toFixed(2)}</p>
+                        <p style={{ fontWeight: 700, fontSize: "15px" }}>{currency}{sub.cost.toFixed(2)}</p>
                         <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>{sub.billingCycle}</p>
                       </div>
                       <button onClick={() => deleteSubscription(sub.id)} style={{ backgroundColor: "transparent", color: "#ef4444", padding: "4px" }}>
@@ -2215,6 +2442,158 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* ─── INVESTMENTS TAB ─── */}
+        {showInvestmentsTab && activeTab === "investments" && (
+          <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div>
+                <h1 style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>Investment Portfolios</h1>
+                <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>Track assets manually or simulate live market updates.</p>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                {priceUpdateMsg && <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: 600 }}>{priceUpdateMsg}</span>}
+                <button
+                  onClick={updateMarketPrices}
+                  disabled={isUpdatingPrices || investments.length === 0}
+                  className="btn-primary"
+                  style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "8px 14px" }}
+                >
+                  {isUpdatingPrices ? (
+                    <>
+                      <span className="spinner" style={{ display: "inline-block", width: "12px", height: "12px", border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                      Fetch live prices
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Investment Summary Cards */}
+            <div className="responsive-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+              <div className="stat-card">
+                <span className="label-mono">Total Value</span>
+                <span className="stat-value">{currency}{investments.reduce((acc, a) => acc + a.amount, 0).toLocaleString()}</span>
+                <span className="stat-subtext">All assets</span>
+              </div>
+              <div className="stat-card">
+                <span className="label-mono">Equities & MFs</span>
+                <span className="stat-value" style={{ color: "#3b82f6" }}>
+                  {currency}{investments.filter(a => a.category === "equity" || a.category === "mutual_fund").reduce((acc, a) => acc + a.amount, 0).toLocaleString()}
+                </span>
+                <span className="stat-subtext">Stock & Fund holdings</span>
+              </div>
+              <div className="stat-card">
+                <span className="label-mono">Crypto Assets</span>
+                <span className="stat-value" style={{ color: "#b3666b" }}>
+                  {currency}{investments.filter(a => a.category === "crypto").reduce((acc, a) => acc + a.amount, 0).toLocaleString()}
+                </span>
+                <span className="stat-subtext">High volatility holdings</span>
+              </div>
+              <div className="stat-card">
+                <span className="label-mono">Total Assets Count</span>
+                <span className="stat-value" style={{ fontSize: "22px", marginTop: "8px" }}>{investments.length}</span>
+                <span className="stat-subtext">Holdings logged</span>
+              </div>
+            </div>
+
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: "24px" }}>
+              {/* Add asset form */}
+              <div className="bento-card" style={{ height: "fit-content" }}>
+                <span className="label-mono" style={{ marginBottom: "14px", display: "block" }}>Add Asset</span>
+                <form onSubmit={addInvestment} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <input type="text" value={invName} onChange={(e) => setInvName(e.target.value)} placeholder="Asset Name (e.g. BTC, Apple)" required />
+                  
+                  <select value={invCategory} onChange={(e) => setInvCategory(e.target.value as any)} required style={{ width: "100%" }}>
+                    <option value="equity">Equity (Stock)</option>
+                    <option value="crypto">Cryptocurrency</option>
+                    <option value="mutual_fund">Mutual Fund</option>
+                    <option value="gold">Gold</option>
+                    <option value="cash">Cash / Liquid</option>
+                    <option value="other">Other Asset</option>
+                  </select>
+
+                  <input type="number" value={invAmount} onChange={(e) => setInvAmount(e.target.value)} placeholder={`Total Value (${currency})`} required />
+                  
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <input type="number" value={invQty} onChange={(e) => setInvQty(e.target.value)} placeholder="Qty (optional)" step="any" />
+                    <input type="number" value={invBuyPrice} onChange={(e) => setInvBuyPrice(e.target.value)} placeholder="Buy price (opt)" step="any" />
+                  </div>
+
+                  <input type="text" value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="Notes (optional)" />
+
+                  <button type="submit" disabled={isAddingInvestment} className="btn-primary" style={{ marginTop: "4px" }}>
+                    {isAddingInvestment ? "Adding..." : "Add Holding"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Holdings table list */}
+              <div className="bento-card" style={{ display: "flex", flexDirection: "column", gap: "16px", minHeight: "400px" }}>
+                <span className="label-mono">Holdings Portfolio</span>
+                <div style={{ overflowY: "auto", overflowX: "auto", flex: 1 }}>
+                  {isFetchingInvestments ? <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "40px" }}>Loading holding records...</p> : (
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                      <thead>
+                        <tr style={{ color: "var(--text-secondary)" }}>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "left" }}>Asset</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "left" }}>Category</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Quantity</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Market Price</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Total value</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "center" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {investments.map((a) => {
+                          const currentVal = a.amount;
+                          const avgCost = a.buyPrice || 0;
+                          const profitPct = avgCost && a.currentPrice ? ((a.currentPrice - avgCost) / avgCost) * 100 : 0;
+                          return (
+                            <tr key={a.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                              <td style={{ padding: "12px 0", fontWeight: 600 }}>
+                                <div>{a.name}</div>
+                                {a.notes && <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: 400, marginTop: "2px" }}>{a.notes}</div>}
+                              </td>
+                              <td style={{ padding: "12px 0" }}>
+                                <span style={{ backgroundColor: "var(--bg-secondary)", padding: "2px 8px", borderRadius: "9999px", fontSize: "11px", textTransform: "capitalize" }}>
+                                  {a.category.replace("_", " ")}
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>{a.quantity !== undefined ? a.quantity : "—"}</td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>
+                                <div>{a.currentPrice !== undefined ? `${currency}${a.currentPrice.toLocaleString()}` : "—"}</div>
+                                {profitPct !== 0 && (
+                                  <div style={{ fontSize: "10px", color: profitPct >= 0 ? "#16a34a" : "#ef4444", fontWeight: 600, marginTop: "2px" }}>
+                                    {profitPct >= 0 ? "+" : ""}{profitPct.toFixed(1)}%
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 700 }}>{currency}{currentVal.toLocaleString()}</td>
+                              <td style={{ padding: "12px 0", textAlign: "center" }}>
+                                <button onClick={() => deleteInvestment(a.id)} style={{ backgroundColor: "transparent", color: "#ef4444", fontSize: "11px", padding: "2px 8px" }}>Delete</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {investments.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>No investment assets logged.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Mobile Bottom Nav */}
@@ -2235,6 +2614,12 @@ export default function Dashboard() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           <span>Notes</span>
         </div>
+        {showInvestmentsTab && (
+          <div onClick={() => setActiveTab("investments")} className={`mobile-nav-link ${activeTab === "investments" ? "active" : ""}`}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span>Invest</span>
+          </div>
+        )}
       </nav>
     </div>
   );

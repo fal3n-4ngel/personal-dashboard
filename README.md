@@ -1,99 +1,124 @@
-# Phub — Personal Hub Dashboard
+# 📊 PHub Dashboard
 
-One dashboard for the stuff you'd otherwise track in five different apps: an expense ledger, a unified movie/show/anime watchlist, a book library, subscriptions, and a scratchpad — plus a ChatGPT Custom GPT integration, so you can log an expense or add something to your watchlist just by texting ChatGPT.
+> **One dashboard to rule them all.** Replace 5 single-purpose apps with a self-hosted, privacy-first command center for your finances, watchlists, books, subscriptions, and quick notes—all hooked up directly to your favorite AI assistant.
 
-Self-hostable, MIT-licensed, backed by your own Firebase project. Nobody but you (and whoever you invite) can see your data.
+---
 
-## Why this exists
+## ✨ Features
 
-I've been running a personal API to track my expenses and watchlist for a while. When ChatGPT shipped Custom GPTs, I hooked mine up via an OpenAPI schema — suddenly I could just tell ChatGPT "spent 400 on lunch" and it'd log it for me. A friend saw it and wanted the same thing, so instead of copy-pasting my setup for him I turned it into an actual multi-user site. This is that: **Phub**.
+* 💸 **Expense Ledger** — Log transactions, tag categories, configure location-specific currencies, and filter by custom salary pay periods.
+* 📈 **Investment Portfolios** — Monitor equities, crypto, mutual funds, gold, and cash in one place with manual or live updates.
+* 🎬 **Unified Watchlist** — Consolidate movies, TV shows, and anime. Sync bidirectionally with AniList & Trakt, or import Letterboxd CSVs.
+* 📚 **Book Library** — Search OpenLibrary to manage your reading list and track progress.
+* 🔄 **Subscription Tracker** — Keep tabs on recurring monthly/yearly costs and calculate your true effective monthly spend.
+* 📝 **Scratchpad Notes** — A lightweight, auto-saving space for quick thoughts.
+* 🤖 **AI Assistant Integration** — Built-in OpenAPI 3.1 schema (`/api/openapi.json`) for Custom GPT Actions, Gemini Gems, or Claude Projects. *Log expenses or add movies just by sending a text.*
 
-Feels a little strange calling it "my project" when most of the actual code was written by Antigravity and Claude — but it's not quite vibe-coded either, since the core modules (the data model, the API surface, the sync logic) were already mine from the original personal version. These tools mostly built the multi-user shell around something that already worked.
+---
 
-Anyway — try it out, star it, fork it, break it, whatever. Issues and PRs are welcome.
+## 💡 Why This Exists
+Well , it's been a while since i worked on any public projects , mostly coz I rarely get tym after my office works , and even when I do it's mostly some personal api's or portfilio changes. 
+So I already had this system to track expenses and movies in personal api , which i enchanced when chatgpt released custom gpts so I can just add stuff via chat ( use ai with no api token or payment ). Instead of using AI in my api , I used my API i AI (sounded cool in my head he he) , anyways a friend saw it he wanted it so rather than giving him my personal api collection thought making a new dashboard itself and here we are
 
-## What's inside
+---
 
-- **Expense Ledger** — log transactions, tag categories, see spending breakdowns. Set a custom salary start day and filter analytics to your actual pay period instead of calendar months.
-- **Unified Watchlist** — movies, shows, and anime in one place. Sync your AniList library and Trakt history bidirectionally (progress/status changes push back to the source), or import a Letterboxd CSV export.
-- **Book Library** — search OpenLibrary to add books, track reading progress.
-- **Subscriptions** — track recurring costs (monthly/yearly) and see your effective monthly spend.
-- **Notes** — a simple auto-saving scratchpad.
-- **ChatGPT integration** — an OpenAPI 3.1 schema (`/api/openapi.json`) built for ChatGPT Custom GPT Actions, plus an in-app guide at `/gpt` that walks you through wiring it up, including copying a fresh auth token.
+## 🛠 Tech Stack
 
-## How it's built
+* **Frontend Framework:** [Next.js 16](https://nextjs.org) (App Router, Turbopack) + React 19 + TypeScript
+* **Database & Auth:** [Firebase](https://firebase.google.com) (Google Sign-In + Firestore REST API)
+* **Integrations:**
+* **Media:** AniList (GraphQL), Trakt (REST), TMDb (Posters)
+* **Books:** OpenLibrary API
+* **AI Actions:** OpenAPI 3.1 Spec
 
-- [Next.js 16](https://nextjs.org) (App Router, Turbopack) + React 19 + TypeScript
-- [Firebase](https://firebase.google.com) — Google sign-in (Auth) + Firestore (data)
-- No ORM, no separate backend — API routes talk to the Firestore REST API directly, authenticated as the signed-in user (see [Security model](#security-model) below)
-- AniList (GraphQL) and Trakt (REST) for media sync, OpenLibrary for book search, TMDb (optional) for poster art
 
-## Self-hosting
 
-If you can clone a repo, you can run your own instance — nothing here is exclusive to any one Firebase project or domain.
+---
 
-### 1. Clone and install
+## 🔒 Security Model
+
+Your financial and personal data shouldn't be handled loosely. PHub Dashboard enforces security at the database boundary:
+
+* **No Master Server Credentials:** The Next.js backend does not hold an admin key. Every database call is routed through the [Firestore REST API](https://firebase.google.com/docs/firestore/use-rest-api) authenticated directly with the user’s personal Firebase ID token.
+* **Enforced Database Rules:** Ownership checks in [`firestore.rules`](https://www.google.com/search?q=firestore.rules) guarantee users can only view or modify their own data.
+* **Hardened API Routes:** All input data is strictly validated before hitting the database, and upstream external proxy routes (like Trakt) are strictly allowlisted to prevent SSRF vulnerabilities.
+
+---
+
+## 🚀 Quickstart & Self-Hosting
+
+You can host your own private instance on Vercel or any Next.js-compatible platform in minutes.
+
+### 1. Clone & Install
 
 ```bash
-git clone https://github.com/fal3n-4ngel/personal-dashboard.git
-cd personal-dashboard
+git clone https://github.com/fal3n-4ngel/PHub-Dashboard.git
+cd PHub-Dashboard
 npm install
+
 ```
 
-### 2. Create a Firebase project
+### 2. Set Up Firebase
 
-1. Create a project at the [Firebase Console](https://console.firebase.google.com).
-2. **Authentication** → Sign-in method → enable **Google**.
-3. **Firestore Database** → create a database (any region).
-4. **Project settings** → General → add a Web App → copy the config object.
-5. Deploy this repo's security rules (they scope every document to its owner — see below):
-   ```bash
-   npm install -g firebase-tools   # if you don't have it
-   firebase login
-   firebase use --add               # pick your project
-   firebase deploy --only firestore:rules
-   ```
-   The Firestore rules in [`firestore.rules`](firestore.rules) are what actually enforce that users can only read/write their own data — the API alone is not the security boundary. **Don't skip this step.**
+1. Go to the [Firebase Console](https://console.firebase.google.com) and create a project.
+2. Enable **Google Sign-in** under **Authentication** → **Sign-in method**.
+3. Create a **Firestore Database**.
+4. Go to **Project Settings** → **General** → **Add Web App** and copy the configuration snippet.
+5. Deploy the security rules (essential for keeping data isolated):
+```bash
+npm install -g firebase-tools   # Install CLI if needed
+firebase login
+firebase use --add              # Select your Firebase project
+firebase deploy --only firestore:rules
 
-### 3. Configure environment variables
+```
+
+
+
+### 3. Configure Environment Variables
 
 ```bash
 cp .env.example .env.local
+
 ```
 
-Fill in `FIREBASE_CONFIG` with the Web App config from step 2, collapsed to one line of JSON. Everything else (Trakt, AniList, TMDb) is optional — the app runs fine without them, you just won't get media sync until you add the keys. See [`.env.example`](.env.example) for where to get each one.
+Fill in `FIREBASE_CONFIG` as a single-line JSON string in your `.env.local`:
 
-### 4. Run it
+```env
+FIREBASE_CONFIG={"apiKey":"...","authDomain":"...","projectId":"..."}
+
+```
+
+*(Optional API keys for Trakt, AniList, and TMDb can also be added here. See [`.env.example`](https://www.google.com/search?q=.env.example).)*
+
+> [!TIP]
+> **Bring-Your-Own-Config (BYOC) Mode:** You don't have to hardcode server-wide environment variables. Users can supply their credentials per request via custom headers (`X-Firebase-Config`, `X-Trakt-Client-Id`, etc.). See [`lib/credentials.ts`](https://www.google.com/search?q=lib/credentials.ts) for details.
+
+### 4. Run the App
 
 ```bash
-npm run dev       # local dev server at http://localhost:3000
-# or
-npm run build && npm run start   # production build
+# Local development server (http://localhost:3000)
+npm run dev
+
+# Production build & start
+npm run build && npm run start
+
 ```
 
-### 5. Deploy
+---
 
-The easiest path is [Vercel](https://vercel.com/new): import the repo, paste the same env vars into the project settings, deploy. Any Next.js-compatible host works too.
+## 🤖 ChatGPT Custom GPT Setup
 
-### Bring-your-own-config mode
+1. Log into your PHub instance.
+2. Open **Connect to ChatGPT** from the sidebar (or visit `/gpt`).
+3. Copy your fresh access token and schema URL.
+4. In ChatGPT, open **Explore GPTs** → **Create** → **Configure** → **Actions**.
+5. Paste `/api/openapi.json` to import the schema, set Authentication to **API Key (Bearer)**, and paste your token.
 
-You don't strictly need step 3's env vars at all — every one of them can also be supplied per-request as a header (`X-Firebase-Config`, `X-Trakt-Client-Id`, etc. — see [`lib/credentials.ts`](lib/credentials.ts)). This is what lets a single deployment double as a config-it-yourself API for anyone who wants to point their own Firebase project at it without redeploying.
+Now you can track expenses, add to watchlists, and manage your dashboard in conversational text!
 
-## Security model
+---
 
-A dashboard holding your expenses is worth taking seriously, so a quick summary of how data access actually works:
+## 📜 License
 
-- The server never holds a privileged Firebase credential. Every Firestore read/write goes through the [Firestore REST API](https://firebase.google.com/docs/firestore/use-rest-api) authenticated with the **caller's own Firebase ID token** — so [`firestore.rules`](firestore.rules) (per-user ownership checks) is the real enforcement layer, not the API code.
-- API routes validate every input (lengths, enums, ranges, batch caps) before it reaches the database.
-- The Trakt proxy route allowlists which upstream paths and methods it'll relay, to close off SSRF via a crafted `path`.
-- Security headers (`X-Frame-Options`, HSTS, etc.) are set repo-wide via `next.config.ts`.
-
-If you find a security issue, please open a private report rather than a public issue.
-
-## ChatGPT Custom GPT integration
-
-Sign in, then go to **Connect to ChatGPT** in the sidebar (or visit `/gpt`) for a step-by-step guide: import the OpenAPI schema as a GPT Action, paste in a fresh auth token, and you're able to log expenses or manage your watchlist by chatting with ChatGPT. Tokens expire after about an hour — the `/gpt` page has a one-click way to copy a fresh one.
-
-## License
-
-[MIT](LICENSE)
+Distributed under the [MIT License](https://www.google.com/search?q=LICENSE). Feel free to fork, break, or modify it to fit your needs!

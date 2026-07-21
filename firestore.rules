@@ -42,6 +42,12 @@ service cloud.firestore {
                          && request.auth.uid == userId;
     }
 
+    // Single portfolio doc per user, keyed by uid.
+    match /portfolios/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
     // Legacy per-item watchlist collection: readable by its owner so the
     // one-time lazy migration can run; no new writes are ever allowed.
     match /watchlist/{itemId} {

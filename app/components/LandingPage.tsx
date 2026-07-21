@@ -414,15 +414,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
 
         /* ─── How it works diagram ─── */
         .diagram-container {
-          max-width: 1040px;
-          margin: 0 auto 80px;
-          background-color: #eae8e0;
-          background-image: radial-gradient(#c4c2ba 1.5px, transparent 1.5px);
-          background-size: 10px 10px;
-          border: 1px solid #d1cfc7;
-          border-radius: 20px;
-          padding: 16px;
-          box-shadow: 0 10px 30px -10px rgba(110, 108, 100, 0.08);
+  
         }
 
         .diagram-inner {
@@ -1490,7 +1482,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           <a href="#chatgpt" className="landing-nav-link">ChatGPT</a>
           <a href="#setup" className="landing-nav-link">Self-Host</a>
           <a href="#pricing" className="landing-nav-link">Pricing</a>
-          <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link">GitHub ↗</a>
+          <a href="https://github.com/fal3n-4ngel/PHub-Dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link">GitHub ↗</a>
         </nav>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button className="login-btn" onClick={onLogin} disabled={!firebaseAuthReady}>
@@ -1517,7 +1509,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           <a href="#chatgpt" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>ChatGPT</a>
           <a href="#setup" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>Self-Host</a>
           <a href="#pricing" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>Pricing</a>
-          <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link">GitHub ↗</a>
+          <a href="https://github.com/fal3n-4ngel/PHub-Dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>GitHub ↗</a>
         </nav>
       </header>
 
@@ -1539,7 +1531,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
             Start for free
             <span>→</span>
           </button>
-          <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="hero-cta-secondary">
+          <a href="https://github.com/fal3n-4ngel/PHub-Dashboard" target="_blank" rel="noopener noreferrer" className="hero-cta-secondary">
             View on GitHub
           </a>
         </div>
@@ -1914,7 +1906,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
               <li><span className="fi-yes">✓</span> Free on Firebase Spark plan</li>
               <li><span className="fi-yes">✓</span> Full env control</li>
             </ul>
-            <a href="https://github.com/fal3n-4ngel/personal-dashboard#readme" target="_blank" rel="noopener noreferrer" className="plan-cta plan-primary">
+            <a href="https://github.com/fal3n-4ngel/PHub-Dashboard#readme" target="_blank" rel="noopener noreferrer" className="plan-cta plan-primary">
               View Setup Guide →
             </a>
           </div>
@@ -1935,7 +1927,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
               <li><span className="fi-note">→</span> PRs & feedback welcome</li>
               <li><span className="fi-note">→</span> ⭐ Star if it helped you</li>
             </ul>
-            <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="plan-cta">
+            <a href="https://github.com/fal3n-4ngel/PHub-Dashboard" target="_blank" rel="noopener noreferrer" className="plan-cta">
               View on GitHub →
             </a>
           </div>
@@ -1975,12 +1967,12 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
               <span className="footer-col-label">Resources</span>
               <ul className="footer-link-list">
                 <li>
-                  <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="footer-link-item">
+                  <a href="https://github.com/fal3n-4ngel/PHub-Dashboard" target="_blank" rel="noopener noreferrer" className="footer-link-item">
                     GitHub Repo ↗
                   </a>
                 </li>
                 <li>
-                  <a href="https://github.com/fal3n-4ngel/personal-dashboard#readme" target="_blank" rel="noopener noreferrer" className="footer-link-item">
+                  <a href="https://github.com/fal3n-4ngel/PHub-Dashboard#readme" target="_blank" rel="noopener noreferrer" className="footer-link-item">
                     Self-Host Guide ↗
                   </a>
                 </li>
@@ -1990,7 +1982,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
                   </a>
                 </li>
                 <li>
-                  <a href="https://github.com/fal3n-4ngel/personal-dashboard/issues" target="_blank" rel="noopener noreferrer" className="footer-link-item">
+                  <a href="https://github.com/fal3n-4ngel/PHub-Dashboard/issues" target="_blank" rel="noopener noreferrer" className="footer-link-item">
                     Report an Issue ↗
                   </a>
                 </li>

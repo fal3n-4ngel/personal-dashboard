@@ -669,3 +669,57 @@ export async function updateNote(session: Session, content: string) {
     body: JSON.stringify({ fields: toFields(docData) }),
   });
 }
+
+export interface InvestmentAsset {
+  id: string;
+  name: string;
+  category: "equity" | "crypto" | "mutual_fund" | "gold" | "cash" | "other";
+  amount: number;
+  quantity?: number;
+  buyPrice?: number;
+  currentPrice?: number;
+  notes?: string;
+}
+
+export interface PortfolioRecord {
+  id: string;
+  assets: InvestmentAsset[];
+  updatedAt: number;
+}
+
+export async function getPortfolio(session: Session): Promise<PortfolioRecord | null> {
+  try {
+    const res = await fsFetch(session, `${docsRoot(session)}/portfolios/${session.uid}`);
+    const data = fromFields(res.fields || {});
+    const assetsRaw = Array.isArray(data.assets) ? data.assets : [];
+    
+    // Parse assets fields safely
+    const assets: InvestmentAsset[] = assetsRaw.map((a: any) => ({
+      id: String(a.id || ""),
+      name: String(a.name || ""),
+      category: (a.category || "equity") as InvestmentAsset["category"],
+      amount: Number(a.amount || 0),
+      quantity: a.quantity !== undefined && a.quantity !== null ? Number(a.quantity) : undefined,
+      buyPrice: a.buyPrice !== undefined && a.buyPrice !== null ? Number(a.buyPrice) : undefined,
+      currentPrice: a.currentPrice !== undefined && a.currentPrice !== null ? Number(a.currentPrice) : undefined,
+      notes: a.notes ? String(a.notes) : undefined,
+    }));
+
+    return { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0) };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function updatePortfolio(session: Session, assets: InvestmentAsset[]) {
+  const docData = { assets, updatedAt: Date.now() };
+  const params = new URLSearchParams();
+  params.append("updateMask.fieldPaths", "assets");
+  params.append("updateMask.fieldPaths", "updatedAt");
+
+  await fsFetch(session, `${docsRoot(session)}/portfolios/${session.uid}?${params}`, {
+    method: "PATCH",
+    body: JSON.stringify({ fields: toFields(docData) }),
+  });
+}

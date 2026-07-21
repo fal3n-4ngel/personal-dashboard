@@ -1,5 +1,5 @@
 {
-  "name": "personal-dashboard",
+  "name": "phub-dashboard",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@vercel/flags": "^3.1.1",
     "firebase": "^12.16.0",
+    "flags": "^4.2.1",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4"
