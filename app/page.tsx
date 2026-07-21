@@ -133,6 +133,79 @@ function getNextFutureBillingDate(dateStr: string, cycle: string): string {
   }
 }
 
+/** Maps common subscription name patterns to their Clearbit logo domain */
+const SUB_LOGO_MAP: [RegExp, string][] = [
+  [/netflix/i,                        "netflix.com"],
+  [/spotify/i,                        "spotify.com"],
+  [/youtube|yt\s*premium/i,           "youtube.com"],
+  [/amazon\s*prime|prime\s*video/i,   "amazon.com"],
+  [/hotstar|disney\+?\s*hotstar/i,    "hotstar.com"],
+  [/disney\+?/i,                      "disneyplus.com"],
+  [/apple\s*tv/i,                     "tv.apple.com"],
+  [/apple\s*music/i,                  "music.apple.com"],
+  [/icloud/i,                         "icloud.com"],
+  [/apple/i,                          "apple.com"],
+  [/hbo\s*max|^max$/i,                "max.com"],
+  [/hulu/i,                           "hulu.com"],
+  [/paramount\+?/i,                   "paramountplus.com"],
+  [/peacock/i,                        "peacocktv.com"],
+  [/mubi/i,                           "mubi.com"],
+  [/crunchyroll/i,                    "crunchyroll.com"],
+  [/sonyliv|sony\s*liv/i,             "sonyliv.com"],
+  [/zee5/i,                           "zee5.com"],
+  [/jiocinema|jio\s*cinema/i,         "jiocinema.com"],
+  [/microsoft\s*365|office\s*365|m365/i, "microsoft.com"],
+  [/xbox/i,                           "xbox.com"],
+  [/playstation|ps\s*plus|psn/i,      "playstation.com"],
+  [/nintendo/i,                       "nintendo.com"],
+  [/adobe/i,                          "adobe.com"],
+  [/figma/i,                          "figma.com"],
+  [/notion/i,                         "notion.so"],
+  [/slack/i,                          "slack.com"],
+  [/zoom/i,                           "zoom.us"],
+  [/dropbox/i,                        "dropbox.com"],
+  [/google\s*one/i,                   "one.google.com"],
+  [/google\s*workspace/i,             "workspace.google.com"],
+  [/github/i,                         "github.com"],
+  [/linear/i,                         "linear.app"],
+  [/openai|chatgpt/i,                 "openai.com"],
+  [/claude|anthropic/i,               "anthropic.com"],
+  [/1password/i,                      "1password.com"],
+  [/lastpass/i,                       "lastpass.com"],
+  [/nordvpn/i,                        "nordvpn.com"],
+  [/expressvpn/i,                     "expressvpn.com"],
+  [/canva/i,                          "canva.com"],
+  [/audible/i,                        "audible.com"],
+  [/medium/i,                         "medium.com"],
+  [/substack/i,                       "substack.com"],
+  [/duolingo/i,                       "duolingo.com"],
+  [/linkedin/i,                       "linkedin.com"],
+  [/coursera/i,                       "coursera.org"],
+  [/udemy/i,                          "udemy.com"],
+  [/tidal/i,                          "tidal.com"],
+  [/deezer/i,                         "deezer.com"],
+  [/soundcloud/i,                     "soundcloud.com"],
+  [/twitch/i,                         "twitch.tv"],
+  [/discord/i,                        "discord.com"],
+  [/setapp/i,                         "setapp.com"],
+  [/grammarly/i,                      "grammarly.com"],
+  [/bitwarden/i,                      "bitwarden.com"],
+  [/vercel/i,                         "vercel.com"],
+  [/netlify/i,                        "netlify.com"],
+  [/supabase/i,                       "supabase.com"],
+  [/raycast/i,                        "raycast.com"],
+];
+
+const LOGO_DEV_TOKEN = "pk_abFC_FBeQnCIIvPXLpp7JA";
+
+function getSubLogoUrl(name: string): string | null {
+  for (const [pattern, domain] of SUB_LOGO_MAP) {
+    if (pattern.test(name))
+      return `https://img.logo.dev/${domain}?token=${LOGO_DEV_TOKEN}&size=40&format=png`;
+  }
+  return null;
+}
+
 /* ─── AniList GraphQL helper ─── */
 const ANILIST_GQL = "https://graphql.anilist.co";
 
@@ -2460,8 +2533,23 @@ export default function Dashboard() {
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = "var(--bg-secondary)")}
                       >
                         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                          <div style={{ width: "38px", height: "38px", borderRadius: "9px", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "17px", flexShrink: 0 }}>
-                            {sub.icon || "💳"}
+                          <div style={{ width: "38px", height: "38px", borderRadius: "9px", backgroundColor: "var(--bg-card)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "17px", flexShrink: 0, overflow: "hidden" }}>
+                            {(() => {
+                              const logoUrl = getSubLogoUrl(sub.name);
+                              if (logoUrl) {
+                                return (
+                                  // logo.dev returns monogram fallback (never 404s), so no onError needed
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={logoUrl}
+                                    alt={sub.name}
+                                    width={28} height={28}
+                                    style={{ objectFit: "contain", borderRadius: "3px" }}
+                                  />
+                                );
+                              }
+                              return sub.icon || "💳";
+                            })()}
                           </div>
                           <div>
                             <p style={{ fontWeight: 600, fontSize: "13px" }}>{sub.name}</p>
@@ -2942,6 +3030,56 @@ export default function Dashboard() {
           </div>
         )}
       </nav>
+
+      {/* ─── Themed Confirm Dialog ─── */}
+      {confirmDlg.isOpen && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+          onClick={() => setConfirmDlg(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            className="bento-card"
+            style={{ width: "100%", maxWidth: "400px", margin: "16px", padding: "28px", display: "flex", flexDirection: "column", gap: "16px", animation: "fadeInScale 0.15s ease" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <style>{`@keyframes fadeInScale { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }`}</style>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
+              {confirmDlg.isDestructive !== false && (
+                <div style={{ width: "40px", height: "40px", borderRadius: "10px", backgroundColor: "rgba(179,102,107,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b3666b" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+              )}
+              <div>
+                <p style={{ fontWeight: 700, fontSize: "15px", marginBottom: "6px" }}>{confirmDlg.title}</p>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{confirmDlg.message}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setConfirmDlg(prev => ({ ...prev, isOpen: false }))}
+              >
+                {confirmDlg.cancelText || "Cancel"}
+              </button>
+              <button
+                style={{
+                  backgroundColor: confirmDlg.isDestructive !== false ? "#b3666b" : "var(--text-primary)",
+                  color: "#fff",
+                  border: "none",
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+                onClick={confirmDlg.onConfirm}
+              >
+                {confirmDlg.confirmText || "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
