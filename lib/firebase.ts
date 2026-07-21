@@ -673,12 +673,14 @@ export async function updateNote(session: Session, content: string) {
 export interface InvestmentAsset {
   id: string;
   name: string;
-  category: "equity" | "crypto" | "mutual_fund" | "gold" | "cash" | "other";
+  category: "equity" | "crypto" | "mutual_fund" | "sip" | "gold" | "cash" | "other";
   amount: number;
+  investedAmount: number;
   quantity?: number;
   buyPrice?: number;
   currentPrice?: number;
   notes?: string;
+  createdAt?: number;
 }
 
 export interface PortfolioRecord {
@@ -699,10 +701,12 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
       name: String(a.name || ""),
       category: (a.category || "equity") as InvestmentAsset["category"],
       amount: Number(a.amount || 0),
+      investedAmount: Number(a.investedAmount !== undefined && a.investedAmount !== null ? a.investedAmount : (a.amount || 0)),
       quantity: a.quantity !== undefined && a.quantity !== null ? Number(a.quantity) : undefined,
       buyPrice: a.buyPrice !== undefined && a.buyPrice !== null ? Number(a.buyPrice) : undefined,
       currentPrice: a.currentPrice !== undefined && a.currentPrice !== null ? Number(a.currentPrice) : undefined,
       notes: a.notes ? String(a.notes) : undefined,
+      createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
     }));
 
     return { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0) };
