@@ -73,16 +73,27 @@ export async function GET() {
           description:
             "Record a single expense, or several at once by sending { \"items\": [...] }. " +
             "Omitted dates default to today. Amounts are in the user's currency (INR).",
-          "x-openai-isConsequential": false,
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: {
-                  oneOf: [
-                    { $ref: "#/components/schemas/ExpenseEntry" },
-                    { $ref: "#/components/schemas/ExpenseBatch" },
-                  ],
+                  type: "object",
+                  description: "Create a single expense by providing its properties directly, or pass an array of items to create multiple.",
+                  properties: {
+                    title: { type: "string", description: "Title of the expense (ignored if items is provided)" },
+                    amount: { type: "number", description: "Expense amount (ignored if items is provided)" },
+                    category: { type: "string", description: "Category name (ignored if items is provided)" },
+                    date: { type: "string", format: "date", description: "YYYY-MM-DD date string (ignored if items is provided)" },
+                    notes: { type: "string", description: "Additional notes (ignored if items is provided)" },
+                    items: {
+                      type: "array",
+                      description: "Optional list of multiple expenses to create in batch",
+                      items: {
+                        $ref: "#/components/schemas/ExpenseEntry"
+                      }
+                    }
+                  }
                 },
               },
             },

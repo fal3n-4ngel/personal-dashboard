@@ -1,9 +1,95 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react";
 
 interface LandingPageProps {
   onLogin: () => void;
   authError?: string;
   firebaseAuthReady: boolean;
+}
+
+/* ─── Live multi-timezone clock, footer flourish ───
+ * One ticking `now` drives every city so they stay in lockstep; each city
+ * just reformats the same Date via Intl instead of running its own timer. */
+const CLOCK_ZONES: { label: string; region: string; zone: string }[] = [
+  { label: "Local", region: "Your device", zone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  { label: "IST", region: "India", zone: "Asia/Kolkata" },
+  { label: "UTC", region: "Universal", zone: "UTC" },
+];
+
+function useTicker() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+/* ─── ChatGPT demo thread: cycles through example exchanges on a loop ─── */
+const GPT_EXAMPLES: { user: string; replyMain: string; replyDetail: string }[] = [
+  { user: "spent ₹450 on lunch today", replyMain: "✅ Logged ₹450 to Food", replyDetail: "“Lunch today” · just now" },
+  { user: "add dune part two to my watchlist", replyMain: "✅ Added to Plan to Watch", replyDetail: "Dune: Part Two · movie" },
+  { user: "how much did I spend this week?", replyMain: "₹3,240 spent this week", replyDetail: "Mostly Food (₹1,850) & Transport (₹640)" },
+];
+
+function ChatDemo() {
+  const [exampleIndex, setExampleIndex] = useState(0);
+  const [phase, setPhase] = useState<"user" | "typing" | "reply">("user");
+
+  useEffect(() => {
+    const delay = phase === "user" ? 900 : phase === "typing" ? 1100 : 2400;
+    const timeout = setTimeout(() => {
+      if (phase === "user") setPhase("typing");
+      else if (phase === "typing") setPhase("reply");
+      else {
+        setExampleIndex((i) => (i + 1) % GPT_EXAMPLES.length);
+        setPhase("user");
+      }
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [phase]);
+
+  const example = GPT_EXAMPLES[exampleIndex];
+
+  return (
+    <div className="chat-thread">
+      <div className="chat-bubble chat-user" key={`u-${exampleIndex}`}>
+        {example.user}
+      </div>
+      {phase === "typing" && (
+        <div className="chat-bubble chat-assistant chat-typing">
+          <span className="chat-dot" /><span className="chat-dot" /><span className="chat-dot" />
+        </div>
+      )}
+      {phase === "reply" && (
+        <div className="chat-bubble chat-assistant" key={`a-${exampleIndex}`}>
+          <div className="chat-reply-main">{example.replyMain}</div>
+          <div className="chat-reply-detail">{example.replyDetail}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveClockStrip() {
+  const now = useTicker();
+  return (
+    <div className="footer-clocks">
+      {CLOCK_ZONES.map((z) => (
+        <div className="footer-clock" key={z.zone}>
+          <span className="footer-clock-time">
+            {now
+              ? new Intl.DateTimeFormat("en-GB", { timeZone: z.zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(now)
+              : "--:--:--"}
+          </span>
+          <span className="footer-clock-city">{z.label}</span>
+          <span className="footer-clock-region">{z.region}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* ─── New logo: bento-grid SVG ─── */
@@ -26,6 +112,8 @@ function BentoLogo({ size = 22, color = "currentColor" }: { size?: number; color
 }
 
 export default function LandingPage({ onLogin, authError, firebaseAuthReady }: LandingPageProps) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   return (
     <div className="landing-container">
       <style>{`
@@ -113,12 +201,33 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           transform: none;
         }
 
+        .mobile-menu-btn {
+          display: none;
+          background: transparent;
+          border: 1px solid #e5e3db;
+          border-radius: 8px;
+          width: 36px;
+          height: 36px;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: #1c1b18;
+        }
+
+        .mobile-nav-drawer {
+          display: none;
+        }
+
         /* ─── Hero ─── */
         .hero-section {
           padding: 90px 24px 60px;
           max-width: 1100px;
           margin: 0 auto;
           text-align: center;
+        }
+
+        .hero-reveal {
+          animation: heroFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
         .hero-badge {
@@ -348,54 +457,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           pointer-events: none;
         }
 
-        /* ─── Feature grid ─── */
-        .features-section {
-          padding: 0 24px 80px;
-          max-width: 1100px;
-          margin: 0 auto;
-        }
-
-        .features-section-label {
-          font-family: monospace;
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 1.5px;
-          color: #9c9a92;
-          font-weight: 600;
-          margin-bottom: 32px;
-          display: block;
-        }
-
-        .features-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 0;
-          border: 1px solid #e5e3db;
-          border-radius: 16px;
-          overflow: hidden;
-          background-color: #ffffff;
-        }
-
-        .feature-card {
-          padding: 32px;
-          border-right: 1px solid #e5e3db;
-          border-bottom: 1px solid #e5e3db;
-          transition: background-color 0.2s;
-        }
-
-        .feature-card:nth-child(2n) {
-          border-right: none;
-        }
-
-        .feature-card:nth-child(3),
-        .feature-card:nth-child(4) {
-          border-bottom: none;
-        }
-
-        .feature-card:hover {
-          background-color: #fafaf8;
-        }
-
+        /* ─── Diagram labels ─── */
         .feature-num {
           font-family: monospace;
           font-size: 11px;
@@ -403,31 +465,6 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           font-weight: 600;
           display: block;
           margin-bottom: 16px;
-        }
-
-        .feature-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background-color: #f4f3ec;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-          margin-bottom: 16px;
-        }
-
-        .feature-title {
-          font-size: 16px;
-          font-weight: 700;
-          margin-bottom: 10px;
-          letter-spacing: -0.3px;
-        }
-
-        .feature-desc {
-          font-size: 13px;
-          color: #6e6c64;
-          line-height: 1.65;
         }
 
         /* ─── Stats bar ─── */
@@ -534,6 +571,114 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           height: 8px;
           border-radius: 50%;
         }
+
+        .browser-title {
+          flex: 1;
+          text-align: center;
+          font-family: monospace;
+          font-size: 10.5px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: #9c9a92;
+          font-weight: 600;
+        }
+
+        /* ─── GPT integration section ─── */
+        .gpt-check-list {
+          list-style: none;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          margin-bottom: 32px;
+        }
+
+        .gpt-check-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          font-size: 14px;
+          color: #1c1b18;
+          line-height: 1.5;
+        }
+
+        .gpt-check-icon {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background-color: #10b981;
+          color: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+
+        .chat-thread {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          justify-content: flex-end;
+          width: 100%;
+          height: 100%;
+        }
+
+        .chat-bubble {
+          max-width: 82%;
+          padding: 11px 15px;
+          border-radius: 15px;
+          font-size: 12.5px;
+          line-height: 1.5;
+          animation: bubbleIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        .chat-user {
+          align-self: flex-end;
+          background-color: #1c1b18;
+          color: #ffffff;
+          border-bottom-right-radius: 4px;
+        }
+
+        .chat-assistant {
+          align-self: flex-start;
+          background-color: #f0fdf4;
+          color: #14532d;
+          border: 1px solid #bbf7d0;
+          border-bottom-left-radius: 4px;
+        }
+
+        .chat-reply-main {
+          font-weight: 700;
+        }
+
+        .chat-reply-detail {
+          font-size: 11px;
+          color: #15803d;
+          margin-top: 3px;
+          opacity: 0.85;
+        }
+
+        .chat-typing {
+          display: flex;
+          gap: 4px;
+          align-items: center;
+          padding: 13px 15px;
+          background-color: #ffffff;
+          border: 1px solid #e5e3db;
+        }
+
+        .chat-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background-color: #9c9a92;
+          animation: chatDotBounce 1s infinite ease-in-out both;
+        }
+
+        .chat-dot:nth-child(2) { animation-delay: 0.15s; }
+        .chat-dot:nth-child(3) { animation-delay: 0.3s; }
 
         .browser-body {
           padding: 20px;
@@ -771,8 +916,56 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           display: grid;
           grid-template-columns: 1.6fr 1fr 1fr;
           gap: 60px;
-          padding-bottom: 48px;
+          padding-bottom: 44px;
           border-bottom: 1px solid #e5e3db;
+        }
+
+        /* ─── Live clock strip ─── */
+        .footer-clocks-row {
+          padding: 28px 0 26px;
+          border-bottom: 1px solid #e5e3db;
+        }
+
+        .footer-clocks {
+          display: flex;
+          gap: 0;
+          margin-top: 4px;
+        }
+
+        .footer-clock {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          padding: 0 28px;
+          border-left: 1px solid #e5e3db;
+        }
+
+        .footer-clock:first-child {
+          padding-left: 0;
+          border-left: none;
+        }
+
+        .footer-clock-time {
+          font-family: monospace;
+          font-size: 17px;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+          color: #1c1b18;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .footer-clock-city {
+          font-size: 12px;
+          font-weight: 600;
+          color: #6e6c64;
+        }
+
+        .footer-clock-region {
+          font-family: monospace;
+          font-size: 9.5px;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          color: #b0aea6;
         }
 
         .footer-brand {
@@ -848,7 +1041,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
         }
 
         .footer-bar {
-          padding: 20px 0;
+          padding: 22px 0;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -857,7 +1050,10 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
         }
 
         .footer-bar-text {
-          font-size: 11px;
+          font-family: monospace;
+          font-size: 10.5px;
+          text-transform: uppercase;
+          letter-spacing: 0.6px;
           color: #9c9a92;
           display: flex;
           align-items: center;
@@ -865,13 +1061,25 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           flex-wrap: wrap;
         }
 
+        .footer-bar-text a {
+          color: #9c9a92;
+          text-decoration: none;
+        }
+
+        .footer-bar-text a:hover {
+          color: #1c1b18;
+        }
+
         .footer-sep { color: #d1cfc7; }
 
         .footer-status {
           display: flex;
           align-items: center;
-          gap: 5px;
-          font-size: 11px;
+          gap: 6px;
+          font-family: monospace;
+          font-size: 10.5px;
+          text-transform: uppercase;
+          letter-spacing: 0.6px;
           color: #9c9a92;
         }
 
@@ -880,11 +1088,78 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           height: 6px;
           background-color: #22c55e;
           border-radius: 50%;
+          box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+        }
+
+        /* ─── Decorative bottom band ─── */
+        .footer-illustration {
+          position: relative;
+          height: 150px;
+          overflow: hidden;
+          background-color: #fafaf8;
+          border-top: 1px solid #e5e3db;
+          background-image: radial-gradient(#e5e3db 1.5px, transparent 1.5px);
+          background-size: 18px 18px;
+          -webkit-mask-image: linear-gradient(to bottom, transparent, black 40px);
+          mask-image: linear-gradient(to bottom, transparent, black 40px);
+        }
+
+        .footer-illustration-mark {
+          position: absolute;
+          right: -40px;
+          bottom: -50px;
+          opacity: 0.06;
+          transform: rotate(-8deg);
+        }
+
+        .footer-illustration-mark.secondary {
+          right: auto;
+          left: -30px;
+          bottom: -70px;
+          opacity: 0.045;
+          transform: rotate(12deg);
+        }
+
+        .footer-signal-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: repeating-linear-gradient(to right, #c4c2ba 0, #c4c2ba 4px, transparent 4px, transparent 10px);
+          opacity: 0.6;
+        }
+
+        .footer-signal-dot {
+          position: absolute;
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background-color: #b0aea6;
         }
 
         /* ─── Animations ─── */
         @keyframes spin-clockwise {
           to { transform: rotate(360deg); }
+        }
+
+        @keyframes heroFadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes drawerSlideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes bubbleIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.97); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes chatDotBounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-3px); opacity: 1; }
         }
 
         /* ─── Responsive ─── */
@@ -895,6 +1170,43 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
 
           .landing-nav {
             display: none;
+          }
+
+          .mobile-menu-btn {
+            display: flex;
+          }
+
+          .mobile-nav-drawer.open {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 65px;
+            left: 16px;
+            right: 16px;
+            background-color: #ffffff;
+            border: 1px solid #e5e3db;
+            border-radius: 14px;
+            box-shadow: 0 16px 40px -12px rgba(28, 27, 24, 0.18);
+            padding: 10px;
+            z-index: 999;
+            animation: drawerSlideDown 0.2s ease-out both;
+          }
+
+          .mobile-nav-drawer .landing-nav-link,
+          .mobile-nav-drawer .login-btn {
+            width: 100%;
+            padding: 13px 14px;
+            border-radius: 9px;
+            font-size: 14px;
+          }
+
+          .mobile-nav-drawer .landing-nav-link:hover {
+            background-color: #f4f3ec;
+          }
+
+          .mobile-nav-drawer .login-btn {
+            justify-content: center;
+            margin-top: 4px;
           }
 
           .hero-title {
@@ -913,19 +1225,6 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
 
           .connections-svg {
             display: none;
-          }
-
-          .features-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .feature-card {
-            border-right: none !important;
-            border-bottom: 1px solid #e5e3db !important;
-          }
-
-          .feature-card:last-child {
-            border-bottom: none !important;
           }
 
           .setup-container {
@@ -963,6 +1262,25 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
             flex-direction: column;
             align-items: flex-start;
           }
+
+          .footer-clocks {
+            flex-wrap: wrap;
+            row-gap: 16px;
+          }
+
+          .footer-clock {
+            padding: 0 20px 0 0;
+            flex: 1 1 40%;
+          }
+
+          .footer-clock:nth-child(2) {
+            border-left: 1px solid #e5e3db;
+            padding-left: 20px;
+          }
+
+          .footer-illustration {
+            height: 100px;
+          }
         }
 
         @media (max-width: 480px) {
@@ -996,31 +1314,55 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           <span>Phub Dashboard</span>
         </a>
         <nav className="landing-nav">
-          <a href="#features" className="landing-nav-link">Features</a>
           <a href="#how-it-works" className="landing-nav-link">How It Works</a>
+          <a href="#chatgpt" className="landing-nav-link">ChatGPT</a>
+          <a href="#setup" className="landing-nav-link">Self-Host</a>
           <a href="#pricing" className="landing-nav-link">Pricing</a>
           <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link">GitHub ↗</a>
         </nav>
-        <button className="login-btn" onClick={onLogin} disabled={!firebaseAuthReady}>
-          <span>Get started</span>
-          <span style={{ fontSize: "14px" }}>→</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button className="login-btn" onClick={onLogin} disabled={!firebaseAuthReady}>
+            <span>Get started</span>
+            <span style={{ fontSize: "14px" }}>→</span>
+          </button>
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setMobileNavOpen((v) => !v)}
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileNavOpen}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {mobileNavOpen ? (
+                <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+              ) : (
+                <><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></>
+              )}
+            </svg>
+          </button>
+        </div>
+        <nav className={`mobile-nav-drawer ${mobileNavOpen ? "open" : ""}`}>
+          <a href="#how-it-works" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>How It Works</a>
+          <a href="#chatgpt" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>ChatGPT</a>
+          <a href="#setup" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>Self-Host</a>
+          <a href="#pricing" className="landing-nav-link" onClick={() => setMobileNavOpen(false)}>Pricing</a>
+          <a href="https://github.com/fal3n-4ngel/personal-dashboard" target="_blank" rel="noopener noreferrer" className="landing-nav-link">GitHub ↗</a>
+        </nav>
       </header>
 
       {/* ─── Hero ─── */}
       <section className="hero-section">
-        <span className="hero-badge">
+        <span className="hero-badge hero-reveal" style={{ animationDelay: "0.02s" }}>
           <BentoLogo size={12} color="#6e6c64" />
           Self-hostable · Open source · Private
         </span>
-        <h1 className="hero-title">
+        <h1 className="hero-title hero-reveal" style={{ animationDelay: "0.08s" }}>
           One dashboard.<br />
           <span className="serif-italic">Everything you track.</span>
         </h1>
-        <p className="hero-subtitle">
+        <p className="hero-subtitle hero-reveal" style={{ animationDelay: "0.14s" }}>
           Consolidate your media watchlists, track daily expenses with custom salary cycles, maintain a book library, and keep a scratchpad — all stored privately in your own database.
         </p>
-        <div className="hero-cta-row">
+        <div className="hero-cta-row hero-reveal" style={{ animationDelay: "0.2s" }}>
           <button className="hero-cta-primary" onClick={onLogin} disabled={!firebaseAuthReady}>
             Start for free
             <span>→</span>
@@ -1029,7 +1371,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
             View on GitHub
           </a>
         </div>
-        <div className="hero-pills">
+        <div className="hero-pills hero-reveal" style={{ animationDelay: "0.26s" }}>
           <span className="hero-pill">💸 Expense Ledger</span>
           <span className="hero-pill">🎬 Media Watchlist</span>
           <span className="hero-pill">📚 Book Library</span>
@@ -1161,64 +1503,53 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
         </div>
       </section>
 
-      {/* ─── Features ─── */}
-      <section id="features" className="features-section">
-        <span className="features-section-label">What's inside</span>
-        <div className="features-grid">
-          <div className="feature-card">
-            <span className="feature-num">01</span>
-            <div className="feature-icon">💸</div>
-            <h3 className="feature-title">Expense Ledger</h3>
-            <p className="feature-desc">
-              Log daily transactions, tag categories, and instantly see spending breakdowns. Set a custom salary start day and filter analytics to your actual pay period — not just calendar months.
+      {/* ─── ChatGPT integration section ─── */}
+      <section id="chatgpt" className="setup-section">
+        <div className="setup-container">
+          <div>
+            <span className="hero-badge" style={{ backgroundColor: "#f4f3ec", marginBottom: "28px" }}>🤖 ChatGPT Custom GPT</span>
+            <h2 className="hero-title" style={{ fontSize: "40px", textAlign: "left", marginBottom: "20px" }}>
+              Text it like a friend.<br />
+              <span className="serif-italic">It logs it like a spreadsheet.</span>
+            </h2>
+            <p className="step-desc" style={{ fontSize: "14px", marginBottom: "32px", maxWidth: "440px" }}>
+              Every route in this API doubles as a ChatGPT Action. Import the schema once, paste in your token, and logging an expense or updating your watchlist is just a text message away.
             </p>
+            <ul className="gpt-check-list">
+              <li className="gpt-check-item">
+                <span className="gpt-check-icon">✓</span>
+                No app to open — talk to it from ChatGPT on your phone
+              </li>
+              <li className="gpt-check-item">
+                <span className="gpt-check-icon">✓</span>
+                Runs on your own OpenAPI schema — no middleman server reading your data
+              </li>
+              <li className="gpt-check-item">
+                <span className="gpt-check-icon">✓</span>
+                Understands natural language — "spent 450 on lunch" just works
+              </li>
+            </ul>
+            <a href="/gpt" className="hero-cta-primary" style={{ display: "inline-flex" }}>
+              See the setup guide
+              <span>→</span>
+            </a>
           </div>
-          <div className="feature-card">
-            <span className="feature-num">02</span>
-            <div className="feature-icon">🎬</div>
-            <h3 className="feature-title">Unified Watchlist</h3>
-            <p className="feature-desc">
-              Sync your AniList anime library and Trakt movie/show history in one tap. Track episode progress, update status, and push changes back to the source — bidirectional sync, no duplicates.
-            </p>
-          </div>
-          <div className="feature-card">
-            <span className="feature-num">03</span>
-            <div className="feature-icon">📚</div>
-            <h3 className="feature-title">Book Library & Notes</h3>
-            <p className="feature-desc">
-              Search OpenLibrary/Google Books to add items, track reading progress, and maintain a Markdown scratchpad. Everything auto-saves to your private Firestore.
-            </p>
-          </div>
-          <div className="feature-card" style={{ backgroundColor: "#f0fdf4" }}>
-            <span className="feature-num" style={{ color: "#10b981" }}>04</span>
-            <div className="feature-icon" style={{ backgroundColor: "#10b981", color: "#fff" }}>💬</div>
-            <h3 className="feature-title">ChatGPT Mobile Integration</h3>
-            <p className="feature-desc">
-              Sync a custom GPT directly with your dashboard API (OpenAPI spec included). Log expenses, update watchlist items, request detailed spending analytics, and get personalized movie or book recommendations on the go for free.
-            </p>
+
+          <div className="browser-mockup">
+            <div className="browser-header">
+              <div className="browser-dot" style={{ backgroundColor: "#ff5f56" }} />
+              <div className="browser-dot" style={{ backgroundColor: "#ffbd2e" }} />
+              <div className="browser-dot" style={{ backgroundColor: "#27c93f" }} />
+              <span className="browser-title">ChatGPT · Phub</span>
+            </div>
+            <div className="browser-body" style={{ alignItems: "flex-end" }}>
+              <ChatDemo />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ─── Stats bar ─── */}
-      <div className="stats-bar">
-        <div className="stat-item">
-          <span className="stat-num">4</span>
-          <span className="stat-label">Core modules</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-num">3</span>
-          <span className="stat-label">API integrations</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-num">₹0</span>
-          <span className="stat-label">Self-host cost</span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-num">MIT</span>
-          <span className="stat-label">License</span>
-        </div>
-      </div>
+
 
       {/* ─── Setup section ─── */}
       <section id="setup" className="setup-section">
@@ -1397,7 +1728,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
             </div>
 
             <div>
-              <span className="footer-col-label">Dashboard</span>
+              <span className="footer-col-label">Product</span>
               <ul className="footer-link-list">
                 <li><span className="footer-link-item" onClick={onLogin}>Expense Ledger</span></li>
                 <li><span className="footer-link-item" onClick={onLogin}>Media Watchlist</span></li>
@@ -1434,18 +1765,38 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
             </div>
           </div>
 
+          <div className="footer-clocks-row">
+            <span className="footer-col-label" style={{ marginBottom: "0" }}>Wherever you're tracking from</span>
+            <LiveClockStrip />
+          </div>
+
           <div className="footer-bar">
             <div className="footer-bar-text">
-              <span>© {new Date().getFullYear()} Personal Hub</span>
+              <span>© {new Date().getFullYear()} PHUB</span>
               <span className="footer-sep">·</span>
-              <span>MIT License</span>
+              <span>MIT LICENSED</span>
               <span className="footer-sep">·</span>
-              <a href="https://github.com/fal3n-4ngel" target="_blank" rel="noopener noreferrer" style={{ color: "#9c9a92", textDecoration: "none" }}>@fal3n-4ngel</a>
+              <a href="https://github.com/fal3n-4ngel" target="_blank" rel="noopener noreferrer">@FAL3N-4NGEL</a>
             </div>
             <div className="footer-status">
               <div className="footer-green-dot" />
               <span>All systems operational</span>
             </div>
+          </div>
+        </div>
+
+        {/* ─── Decorative bottom band ─── */}
+        <div className="footer-illustration" aria-hidden="true">
+          <div className="footer-signal-line" style={{ top: "28%" }} />
+          <div className="footer-signal-line" style={{ top: "62%" }} />
+          <div className="footer-signal-dot" style={{ top: "28%", left: "14%" }} />
+          <div className="footer-signal-dot" style={{ top: "62%", left: "38%" }} />
+          <div className="footer-signal-dot" style={{ top: "28%", left: "72%" }} />
+          <div className="footer-illustration-mark secondary">
+            <BentoLogo size={130} color="#1c1b18" />
+          </div>
+          <div className="footer-illustration-mark">
+            <BentoLogo size={260} color="#1c1b18" />
           </div>
         </div>
       </footer>
