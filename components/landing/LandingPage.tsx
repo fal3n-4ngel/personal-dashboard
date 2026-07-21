@@ -1779,7 +1779,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
                 Natural language recognition — &ldquo;I spent 400 on transit&rdquo; maps instantly
               </li>
             </ul>
-            <a href="/gpt" className="hero-cta-primary" style={{ display: "inline-flex" }}>
+            <a href="/assistant" className="hero-cta-primary" style={{ display: "inline-flex" }}>
               See the setup guide
               <span>→</span>
             </a>
@@ -1986,7 +1986,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
                 <li><span className="footer-link-item" onClick={onLogin}>Media Watchlist</span></li>
                 <li><span className="footer-link-item" onClick={onLogin}>Book Library</span></li>
                 <li><span className="footer-link-item" onClick={onLogin}>Quick Notes</span></li>
-                <li><a href="/gpt" className="footer-link-item">ChatGPT Plugin</a></li>
+                <li><a href="/assistant" className="footer-link-item">ChatGPT/Gemini Plugin</a></li>
               </ul>
             </div>
 

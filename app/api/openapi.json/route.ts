@@ -144,11 +144,17 @@ export async function GET() {
         get: {
           operationId: "listWatchlistItems",
           summary: "List watchlist items",
-          description: "Retrieve the user's movies, shows, and anime, most recently updated first.",
+          description: "Retrieve the user's movies, shows, anime, and books, most recently updated first. Supports filtering by type or status, plus pagination (limit/offset) to prevent large payloads.",
           "x-openai-isConsequential": false,
+          parameters: [
+            { name: "type", in: "query", required: false, description: "Filter by media type: 'movie', 'show', 'anime', or 'book'", schema: { type: "string", enum: ["movie", "show", "anime", "book"] } },
+            { name: "status", in: "query", required: false, description: "Filter by status: 'watching', 'plan_to_watch', 'completed', or 'dropped'", schema: { type: "string", enum: ["watching", "plan_to_watch", "completed", "dropped"] } },
+            { name: "limit", in: "query", required: false, description: "Maximum number of items to return (default 50)", schema: { type: "integer", default: 50 } },
+            { name: "offset", in: "query", required: false, description: "Offset index for pagination", schema: { type: "integer", default: 0 } },
+          ],
           responses: {
             "200": {
-              description: "Array of watchlist items",
+              description: "Array of watchlist items (or paginated object if limit/offset requested)",
               content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/WatchlistItem" } } } },
             },
             "401": errorResponse("Missing or invalid authentication token"),

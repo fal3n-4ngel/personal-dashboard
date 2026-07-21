@@ -98,8 +98,55 @@ export async function verifyIdToken(config: FirebaseWebConfig, idToken: string):
   return user;
 }
 
+// Exchanges a permanent Firebase Refresh Token for a fresh ID token on-demand.
+// Allows long-lived API tokens for LLM integrations, custom GPTs, and automated scripts.
+export async function refreshIdToken(
+  config: FirebaseWebConfig,
+  refreshToken: string
+): Promise<{ idToken: string; user: AuthedUser }> {
+  const tokenHash = createHash("sha256").update(refreshToken).digest("hex");
+  const cacheKey = `refresh:${config.projectId}:${tokenHash}`;
+  const cached = cacheGet<{ idToken: string; user: AuthedUser }>(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams();
+  params.append("grant_type", "refresh_token");
+  params.append("refresh_token", refreshToken);
+
+  const res = await fetch(
+    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(config.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    }
+  );
+
+  if (!res.ok) {
+    throw new ApiError(401, "Invalid or expired authentication token.");
+  }
+
+  const data = await res.json();
+  const idToken = data.id_token || data.access_token;
+  const uid = data.user_id;
+
+  if (!idToken || !uid) {
+    throw new ApiError(401, "Invalid or expired authentication token.");
+  }
+
+  const user: AuthedUser = {
+    uid,
+    email: null,
+    displayName: null,
+  };
+
+  const result = { idToken, user };
+  cacheSet(cacheKey, result, 4 * 60 * 1000);
+  return result;
+}
+
 // Authenticates an API request: resolves credentials, extracts the bearer
-// token, and verifies it. Throws ApiError (401/429/400) on failure.
+// token, and verifies it. Supports both short-lived ID tokens and permanent API keys/refresh tokens. Throws ApiError (401/429/400) on failure.
 export async function requireUser(req: NextRequest): Promise<Session> {
   const ip = clientIp(req);
   checkAuthFailures(ip);
@@ -109,18 +156,26 @@ export async function requireUser(req: NextRequest): Promise<Session> {
 
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw new ApiError(401, "Missing or invalid Authorization header. Expected 'Bearer <Firebase ID token>'.");
+    throw new ApiError(401, "Missing or invalid Authorization header. Expected 'Bearer <token>'.");
   }
-  const idToken = authHeader.substring(7).trim();
-  if (!idToken) {
+  let token = authHeader.substring(7).trim();
+  if (token.startsWith("phub_")) {
+    token = token.replace(/^phub_/, "");
+  }
+  if (!token) {
     throw new ApiError(401, "Missing bearer token.");
   }
 
   try {
-    const user = await verifyIdToken(config, idToken);
-    return { creds, config, uid: user.uid, idToken, user };
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 401) recordAuthFailure(ip);
-    throw error;
+    const user = await verifyIdToken(config, token);
+    return { creds, config, uid: user.uid, idToken: token, user };
+  } catch {
+    try {
+      const { idToken, user } = await refreshIdToken(config, token);
+      return { creds, config, uid: user.uid, idToken, user };
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) recordAuthFailure(ip);
+      throw err;
+    }
   }
 }

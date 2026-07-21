@@ -1554,10 +1554,14 @@ export default function Dashboard() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
             Connect AI Agent
           </a>
-          <a href="/api/openapi.json" target="_blank" rel="noopener noreferrer" className="nav-link" style={{ marginBottom: "8px", fontSize: "12px" }}>
+          <a href="/api/openapi.json" target="_blank" rel="noopener noreferrer" className="nav-link" style={{ fontSize: "12px" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5V5A2.5 2.5 0 0 1 6.5 2.5H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
             OpenAPI Spec
           </a>
+          <button onClick={() => setShowOnboarding(true)} className="nav-link" style={{ width: "100%", textAlign: "left", marginBottom: "8px", fontSize: "12px", border: "none", background: "none", cursor: "pointer" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Feature Guide
+          </button>
           <div className="profile-card">
             {user.photoURL
               ? <img src={user.photoURL} alt="profile" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} referrerPolicy="no-referrer" />
@@ -1566,7 +1570,22 @@ export default function Dashboard() {
               <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.displayName || "User"}</p>
               <p style={{ fontSize: "10px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
             </div>
-            <button onClick={async () => { if (firebaseAuth) await firebaseAuth.signOut(firebaseAuth.auth); setExpenses([]); setWatchlist([]); setExpensesLoaded(false); disconnectAnilist(); disconnectTrakt(); }} title="Sign out" style={{ backgroundColor: "transparent", padding: "4px", color: "var(--text-muted)" }}>
+            <button
+              onClick={() => {
+                triggerConfirm("Sign Out", "Are you sure you want to sign out?", async () => {
+                  if (firebaseAuth) {
+                    await firebaseAuth.signOut(firebaseAuth.auth);
+                    setExpenses([]);
+                    setWatchlist([]);
+                    setExpensesLoaded(false);
+                    disconnectAnilist();
+                    disconnectTrakt();
+                  }
+                }, false, "Sign Out");
+              }}
+              title="Sign out"
+              style={{ backgroundColor: "transparent", padding: "4px", color: "var(--text-muted)", border: "none", cursor: "pointer" }}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
           </div>

@@ -88,6 +88,19 @@ export default function AssistantIntegrationPage() {
     }
   }
 
+  async function copyPermanentKey() {
+    if (!authApi?.auth?.currentUser) return;
+    setTokenBusy(true);
+    try {
+      const key = authApi.auth.currentUser.refreshToken;
+      await copyText("perm_key", key);
+    } catch {
+      setAuthError("Could not retrieve key. Try signing in again.");
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+
   async function signIn() {
     if (!authApi) return;
     try {
@@ -201,13 +214,16 @@ Always confirm what you logged in one short line. Never invent ids — fetch the
             {authLoading ? (
               <p style={{ fontSize: "12px", color: "var(--text-muted)" }}>Checking sign-in…</p>
             ) : user ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 <p style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                   Signed in as <strong>{user.displayName || user.email}</strong>
                 </p>
-                <div>
-                  <button onClick={copyToken} disabled={tokenBusy} className="btn-primary" style={{ fontSize: "12px", padding: "8px 16px" }}>
-                    {tokenBusy ? "Generating…" : copied === "token" ? "✓ Token copied" : "Copy fresh ID token"}
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={copyPermanentKey} disabled={tokenBusy} className="btn-primary" style={{ fontSize: "12px", padding: "8px 16px" }}>
+                    {tokenBusy ? "Generating…" : copied === "perm_key" ? "✓ Permanent Key Copied" : "Copy Permanent API Key (Never Expires)"}
+                  </button>
+                  <button onClick={copyToken} disabled={tokenBusy} className="btn-secondary" style={{ fontSize: "12px", padding: "8px 16px" }}>
+                    {tokenBusy ? "Generating…" : copied === "token" ? "✓ Token Copied" : "Copy 1-Hour ID Token"}
                   </button>
                 </div>
               </div>
@@ -217,9 +233,8 @@ Always confirm what you logged in one short line. Never invent ids — fetch the
               </button>
             )}
 
-            <div style={{ marginTop: "14px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#92400e", lineHeight: 1.6 }}>
-              <strong>Tokens expire after about an hour.</strong> When your agent starts getting &ldquo;Unauthorized&rdquo; errors,
-              come back here and copy a fresh one. Treat the token like a password — do not share your custom agent.
+            <div style={{ marginTop: "14px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#166534", lineHeight: 1.6 }}>
+              <strong>Permanent API Key:</strong> Use the Permanent API Key for custom GPTs, Claude Projects, or automated AI Agents. It never expires and auto-refreshes in the background. Treat the key like a password — do not share it publicly.
             </div>
           </div>
         </div>

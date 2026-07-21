@@ -9,7 +9,36 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const session = await requireUser(req);
-    const items = await listWatchlist(session);
+    let items = await listWatchlist(session);
+
+    const type = req.nextUrl.searchParams.get("type");
+    const status = req.nextUrl.searchParams.get("status");
+    const limitParam = req.nextUrl.searchParams.get("limit");
+    const offsetParam = req.nextUrl.searchParams.get("offset");
+
+    if (type) {
+      items = items.filter((i) => i.type.toLowerCase() === type.toLowerCase());
+    }
+    if (status) {
+      items = items.filter((i) => i.status.toLowerCase() === status.toLowerCase());
+    }
+
+    const total = items.length;
+    const hasPagination = limitParam !== null || offsetParam !== null;
+
+    if (hasPagination) {
+      const offset = Math.max(0, parseInt(offsetParam || "0", 10) || 0);
+      const limit = Math.max(1, parseInt(limitParam || "50", 10) || 50);
+      const paginatedItems = items.slice(offset, offset + limit);
+      return NextResponse.json({
+        items: paginatedItems,
+        total,
+        offset,
+        limit,
+        hasMore: offset + limit < total,
+      });
+    }
+
     return NextResponse.json(items);
   } catch (error) {
     return toErrorResponse(error, "GET /api/watchlist");

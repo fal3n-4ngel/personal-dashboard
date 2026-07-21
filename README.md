@@ -112,7 +112,7 @@ npm run build && npm run start
 ## 🤖 ChatGPT Custom GPT Setup
 
 1. Log into your PHub instance.
-2. Open **Connect to ChatGPT** from the sidebar (or visit `/gpt`).
+2. Open **Connect to ChatGPT** from the sidebar (or visit `/assistant`).
 3. Copy your fresh access token and schema URL.
 4. In ChatGPT, open **Explore GPTs** → **Create** → **Configure** → **Actions**.
 5. Paste `/api/openapi.json` to import the schema, set Authentication to **API Key (Bearer)**, and paste your token.
