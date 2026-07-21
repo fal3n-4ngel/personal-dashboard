@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AUTHOR, SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-static";
 
@@ -37,10 +38,11 @@ export async function GET() {
         "Every request must carry the user's Firebase ID token as a Bearer token; all data is scoped to that user. " +
         "Self-hosted deployments configure Firebase via the FIREBASE_CONFIG environment variable.",
       version: "2.0.0",
+      contact: { name: AUTHOR.name, url: AUTHOR.url, email: AUTHOR.email },
     },
     servers: [
       {
-        url: "https://www.adithyakrishnan.com",
+        url: SITE_URL,
         description: "Production server",
       },
     ],

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { SITE_URL } from "@/lib/site";
 
 /* ─── ChatGPT Custom GPT integration guide ───
  * Walks through connecting the dashboard API to a Custom GPT via Actions:
@@ -53,7 +54,7 @@ export default function GptIntegrationPage() {
     return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
-  const schemaUrl = `${origin || "https://www.adithyakrishnan.com"}/api/openapi.json`;
+  const schemaUrl = `${origin || SITE_URL}/api/openapi.json`;
 
   async function copyText(key: string, text: string) {
     try {

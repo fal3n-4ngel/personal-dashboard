@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { AUTHOR } from "@/lib/site";
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -1723,7 +1724,8 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
                 A private tracking dashboard for media watchlists, daily expenses, book reading, and notes. Built for self-hosters and privacy-first users.
               </p>
               <p className="footer-byline">
-                Built by <a href="https://github.com/fal3n-4ngel" target="_blank" rel="noopener noreferrer">@fal3n-4ngel</a>
+                Built by <a href={AUTHOR.url} target="_blank" rel="noopener noreferrer">{AUTHOR.name}</a>
+                {" "}· <a href={AUTHOR.github} target="_blank" rel="noopener noreferrer">@{AUTHOR.githubHandle}</a>
               </p>
             </div>
 
