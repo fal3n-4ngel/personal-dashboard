@@ -1,7 +1,7 @@
 import { ApiError } from "./errors";
 import type { ExpenseEntry, SyncEntry, SyncSource, WatchlistItem } from "./firebase";
 
-const MEDIA_TYPES = ["movie", "show", "anime"] as const;
+const MEDIA_TYPES = ["movie", "show", "anime", "book"] as const;
 const MEDIA_STATUSES = ["plan_to_watch", "watching", "completed", "dropped"] as const;
 
 export const MAX_EXPENSE_BATCH = 100;

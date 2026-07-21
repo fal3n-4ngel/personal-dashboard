@@ -290,6 +290,10 @@ button {
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  .mobile-bottom-nav::-webkit-scrollbar {
+    display: none;
+  }
+
   .mobile-nav-link {
     display: flex;
     flex-direction: column;

@@ -24,7 +24,7 @@ export interface ExpenseRecord {
 export interface WatchlistItem {
   id?: string;
   title: string;
-  type: "movie" | "show" | "anime";
+  type: "movie" | "show" | "anime" | "book";
   status: "plan_to_watch" | "watching" | "completed" | "dropped";
   progress: number;
   totalEpisodes: number | null;
@@ -574,4 +574,39 @@ export async function deleteWatchlistItem(session: Session, id: string) {
   await writeWatchlistItems(session, { [id]: null });
   cacheInvalidate(watchlistCacheKey(session));
   return { id };
+}
+export interface SubscriptionRecord { id: string; name: string; cost: number; billingCycle: string; nextBillingDate: string; icon: string | null; createdAt: number; }
+export interface NoteRecord { id: string; content: string; updatedAt: number; }
+
+export async function listSubscriptions(session: Session): Promise<SubscriptionRecord[]> {
+  const rows = await runOwnedQuery(session, "subscriptions");
+  return rows.map(({ id, data }) => ({
+    id, name: data.name as string, cost: data.cost as number, billingCycle: data.billingCycle as string,
+    nextBillingDate: data.nextBillingDate as string, icon: data.icon as string | null, createdAt: typeof data.createdAt === "number" ? data.createdAt : 0
+  })).sort((a, b) => b.createdAt - a.createdAt);
+}
+export async function createSubscription(session: Session, entry: any) {
+  const docData = { userId: session.uid, name: entry.name, cost: entry.cost, billingCycle: entry.billingCycle, nextBillingDate: entry.nextBillingDate, icon: entry.icon || null, createdAt: Date.now() };
+  const created = await fsFetch(session, "/subscriptions", { method: "POST", body: JSON.stringify({ fields: toFields(docData) }) });
+  return { id: idFromName(created.name) };
+}
+export async function deleteSubscription(session: Session, id: string) {
+  await fsFetch(session, docName(session, "subscriptions", assertDocId(id, "subscription")), { method: "DELETE" });
+}
+
+export async function getNote(session: Session): Promise<NoteRecord | null> {
+  try {
+    const res = await fsFetch(session, docName(session, "notes", session.uid));
+    const data = fromFields(res.fields || {});
+    return { id: session.uid, content: (data.content as string) || "", updatedAt: (data.updatedAt as number) || 0 };
+  } catch (err: any) {
+    if (err.status === 404) return null;
+    throw err;
+  }
+}
+export async function updateNote(session: Session, content: string) {
+  const docData = { userId: session.uid, content, updatedAt: Date.now() };
+  await fsFetch(session, docName(session, "notes", session.uid) + "?updateMask.fieldPaths=content&updateMask.fieldPaths=updatedAt", {
+    method: "PATCH", body: JSON.stringify({ fields: toFields(docData) })
+  });
 }

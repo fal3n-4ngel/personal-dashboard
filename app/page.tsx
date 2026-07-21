@@ -39,7 +39,7 @@ interface Expense {
 interface WatchlistItem {
   id: string;
   title: string;
-  type: "movie" | "show" | "anime";
+  type: "movie" | "show" | "anime" | "book";
   status: "plan_to_watch" | "watching" | "completed" | "dropped";
   progress: number;
   totalEpisodes: number | null;
@@ -51,9 +51,44 @@ interface WatchlistItem {
   traktId?: number | null; // store Trakt media ID for sync
 }
 
+interface Subscription {
+  id: string;
+  name: string;
+  cost: number;
+  billingCycle: "monthly" | "yearly";
+  nextBillingDate: string;
+  icon: string | null;
+  createdAt: number;
+}
+
+interface Habit {
+  id: string;
+  name: string;
+  icon: string | null;
+  frequency: "daily" | "weekly";
+  completions: string[]; // array of YYYY-MM-DD
+  createdAt: number;
+}
+
+interface Note {
+  content: string;
+  updatedAt: number;
+}
+
+interface Goal {
+  id: string;
+  title: string;
+  targetAmount: number;
+  currentAmount: number;
+  unit: string;
+  deadline: string | null;
+  color: string;
+  createdAt: number;
+}
+
 interface SearchResult {
   title: string;
-  type: "movie" | "show" | "anime";
+  type: "movie" | "show" | "anime" | "book";
   totalEpisodes: number | null;
   coverImage: string | null;
   year: number | null;
@@ -135,7 +170,17 @@ export default function Dashboard() {
   const [traktSyncMsg, setTraktSyncMsg] = useState("");
 
   /* ─── Navigation ─── */
-  const [activeTab, setActiveTab] = useState<"expenses" | "media">("expenses");
+  const [activeTab, setActiveTab] = useState<"expenses" | "subscriptions" | "habits" | "media" | "books" | "goals" | "notes">("expenses");
+
+  /* ─── State for New Features ─── */
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [isFetchingSubscriptions, setIsFetchingSubscriptions] = useState(false);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [isFetchingHabits, setIsFetchingHabits] = useState(false);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [isFetchingGoals, setIsFetchingGoals] = useState(false);
+  const [note, setNote] = useState<Note>({ content: "", updatedAt: 0 });
+  const [isFetchingNote, setIsFetchingNote] = useState(false);
 
   /* ─── Filters ─── */
   const [timeFilter, setTimeFilter] = useState("all");
@@ -149,22 +194,39 @@ export default function Dashboard() {
   const [expenseCategory, setExpenseCategory] = useState("");
   const [expenseDate, setExpenseDate] = useState("");
   const [expenseNotes, setExpenseNotes] = useState("");
+
+  /* ─── Subscriptions State ─── */
+  const [subName, setSubName] = useState("");
+  const [subCost, setSubCost] = useState("");
+  const [subCycle, setSubCycle] = useState<"monthly"|"yearly">("monthly");
+  const [subNextDate, setSubNextDate] = useState("");
+  const [subIcon, setSubIcon] = useState("");
+  const [isAddingSub, setIsAddingSub] = useState(false);
+
+
+  /* ─── Notes State ─── */
+  const [noteContent, setNoteContent] = useState("");
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const saveNoteTimeout = useRef<NodeJS.Timeout | null>(null);
   const [expenseSearch, setExpenseSearch] = useState("");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [newCategoryInput, setNewCategoryInput] = useState("");
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [isFetchingExpenses, setIsFetchingExpenses] = useState(false);
+  const [expenseTab, setExpenseTab] = useState<"ledger"|"subscriptions">("ledger");
 
   /* ─── Watchlist State ─── */
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [isFetchingWatchlist, setIsFetchingWatchlist] = useState(false);
   const [mediaQuery, setMediaQuery] = useState("");
-  const [mediaType, setMediaType] = useState<"anime" | "movie" | "show">("anime");
+  const [mediaType, setMediaType] = useState<"movie" | "show" | "anime" | "book">("movie");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchingMedia, setIsSearchingMedia] = useState(false);
   const [watchlistFilter, setWatchlistFilter] = useState<"all" | "anime" | "movie" | "show">("all");
   const [watchlistTab, setWatchlistTab] = useState<"watching" | "plan" | "completed">("watching");
   const [mediaCategory, setMediaCategory] = useState<"general" | "anime">("general");
+  const [isImportingLb, setIsImportingLb] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   /* ─── Load salary cycle preference ─── */
   useEffect(() => {
     const savedDay = localStorage.getItem("salary_start_day");
@@ -273,7 +335,12 @@ export default function Dashboard() {
 
   /* ─── Fetch data once when user logs in (expenseSearch is filtered client-side, not refetched) ─── */
   useEffect(() => {
-    if (user) { fetchExpenses(); fetchWatchlist(); }
+    if (user) { 
+      fetchExpenses(); 
+      fetchWatchlist();
+      fetchSubscriptions();
+      fetchNote();
+    }
   }, [user]);
 
   const getHeaders = useCallback(() => ({
@@ -635,6 +702,42 @@ export default function Dashboard() {
     if (res.ok) setExpenses((prev) => prev.filter((e) => e.id !== id));
   };
 
+  const addSubscription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subName || !subCost || !subNextDate) return;
+    setIsAddingSub(true);
+    try {
+      const payload = { name: subName, cost: Number(subCost), billingCycle: subCycle, nextBillingDate: subNextDate, icon: subIcon || null };
+      const res = await fetch("/api/subscriptions", { method: "POST", headers: getHeaders(), body: JSON.stringify(payload) });
+      if (res.ok) {
+        const { id } = await res.json();
+        setSubscriptions((prev) => [{ id, ...payload, createdAt: Date.now() }, ...prev]);
+        setSubName(""); setSubCost(""); setSubNextDate(""); setSubIcon(""); setSubCycle("monthly");
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsAddingSub(false); }
+  };
+
+  const deleteSubscription = async (id: string) => {
+    if (!confirm("Delete this subscription?")) return;
+    const res = await fetch(`/api/subscriptions/${id}`, { method: "DELETE", headers: getHeaders() });
+    if (res.ok) setSubscriptions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+
+  /* ─── Notes Methods ─── */
+  const updateNote = (newContent: string) => {
+    setNoteContent(newContent);
+    setIsSavingNote(true);
+    if (saveNoteTimeout.current) clearTimeout(saveNoteTimeout.current);
+    saveNoteTimeout.current = setTimeout(async () => {
+      try {
+        await fetch("/api/notes", { method: "POST", headers: getHeaders(), body: JSON.stringify({ content: newContent }) });
+      } catch (err) { console.error(err); }
+      finally { setIsSavingNote(false); }
+    }, 1000);
+  };
+
   /* ─── Watchlist API ─── */
   const fetchWatchlist = async () => {
     setIsFetchingWatchlist(true);
@@ -643,6 +746,30 @@ export default function Dashboard() {
       if (res.ok) setWatchlist(await res.json());
     } catch (err) { console.error(err); }
     finally { setIsFetchingWatchlist(false); }
+  };
+
+  /* ─── New Features API ─── */
+  const fetchSubscriptions = async () => {
+    setIsFetchingSubscriptions(true);
+    try {
+      const res = await fetch("/api/subscriptions", { headers: getHeaders() });
+      if (res.ok) setSubscriptions(await res.json());
+    } catch (err) { console.error(err); }
+    finally { setIsFetchingSubscriptions(false); }
+  };
+
+
+
+  const fetchNote = async () => {
+    setIsFetchingNote(true);
+    try {
+      const res = await fetch("/api/notes", { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.content) setNoteContent(data.content);
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsFetchingNote(false); }
   };
 
   const addMediaToWatchlist = async (item: SearchResult) => {
@@ -716,6 +843,119 @@ export default function Dashboard() {
       }
     } catch (err) { console.error(err); }
     finally { setIsSearchingMedia(false); }
+  };
+
+  const searchBooks = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mediaQuery.trim()) return;
+    setIsSearchingMedia(true);
+    setSearchResults([]);
+    try {
+      const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(mediaQuery)}&limit=8`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults((data.docs || []).map((item: any) => {
+          return {
+            title: item.title,
+            type: "book" as const,
+            totalEpisodes: item.number_of_pages_median || null, // Reuse totalEpisodes for total pages
+            coverImage: item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-M.jpg` : null,
+            year: item.first_publish_year || null,
+          };
+        }));
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsSearchingMedia(false); }
+  };
+
+  const handleLetterboxdImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingLb(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim() !== "");
+      if (lines.length < 2) throw new Error("Invalid CSV format");
+
+      const headerLine = lines[0].toLowerCase();
+      // Use a robust CSV parser for header
+      const headers = headerLine.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map(s => s.replace(/(^"|"$)/g, '')) || [];
+      const nameIdx = headers.findIndex(col => col.includes('name'));
+      const yearIdx = headers.findIndex(col => col.includes('year'));
+
+      if (nameIdx === -1) throw new Error("Could not find 'Name' column in CSV");
+
+      const newItems: Omit<WatchlistItem, 'id'>[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        // Simple regex-based CSV row parser ignoring commas in quotes
+        let arr = [];
+        let quote = false;
+        let cell = '';
+        const str = lines[i];
+        for (let c = 0; c < str.length; c++) {
+          let char = str[c];
+          if (char === '"' && str[c+1] === '"') {
+            cell += '"';
+            c++;
+          } else if (char === '"') {
+            quote = !quote;
+          } else if (char === ',' && !quote) {
+            arr.push(cell.trim());
+            cell = '';
+          } else {
+            cell += char;
+          }
+        }
+        arr.push(cell.trim());
+        
+        if (!arr[nameIdx]) continue;
+
+        const title = arr[nameIdx].replace(/(^"|"$)/g, '');
+        const year = yearIdx !== -1 && arr[yearIdx] ? parseInt(arr[yearIdx].replace(/(^"|"$)/g, '')) : null;
+
+        newItems.push({
+          title,
+          type: "movie",
+          status: headerLine.includes("rating") || headerLine.includes("watched") ? "completed" : "plan_to_watch",
+          progress: 1,
+          totalEpisodes: 1,
+          coverImage: null,
+          year: year || null,
+          updatedAt: Date.now(),
+          rating: 0,
+        });
+      }
+
+      if (newItems.length > 0) {
+        if (!confirm(`Found ${newItems.length} movies. Import them into your watchlist?`)) {
+          setIsImportingLb(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+
+        const savedItems: WatchlistItem[] = [];
+        for (const item of newItems) {
+          const res = await fetch("/api/watchlist", {
+            method: "POST", headers: getHeaders(),
+            body: JSON.stringify(item),
+          });
+          if (res.ok) {
+            const { id } = await res.json();
+            savedItems.push({ id, ...item });
+          }
+        }
+        setWatchlist(prev => [...savedItems, ...prev]);
+        alert(`Successfully imported ${savedItems.length} movies!`);
+      } else {
+        alert("No movies found in the CSV.");
+      }
+    } catch (err: any) {
+      alert("Import failed: " + err.message);
+    } finally {
+      setIsImportingLb(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const getSalaryCycleRange = (salaryDay: number) => {
@@ -913,7 +1153,16 @@ export default function Dashboard() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
               Media Watchlist
             </div>
+            <div onClick={() => setActiveTab("books")} className={`nav-link ${activeTab === "books" ? "active" : ""}`}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              Book Library
+            </div>
+            <div onClick={() => setActiveTab("notes")} className={`nav-link ${activeTab === "notes" ? "active" : ""}`}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Quick Notes
+            </div>
           </nav>
+
 
           {/* AniList connection block */}
           <div style={{ marginTop: "24px", borderTop: "1px solid var(--border-subtle)", paddingTop: "16px" }}>
@@ -922,10 +1171,10 @@ export default function Dashboard() {
               <div style={{ padding: "10px 14px", display: "flex", gap: "10px", alignItems: "center" }}>
                 {anilistUser.avatar
                   ? <img src={anilistUser.avatar} alt="AL" style={{ width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover" }} />
-                  : <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "var(--accent-anime)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "#fff", fontWeight: 700 }}>AL</div>}
+                  : <img src="/anilist.svg" alt="AL" style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "#020617", objectFit: "contain", padding: "2px" }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{anilistUser.name}</p>
-                  <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>AniList connected</p>
+                  <p style={{ fontSize: "12px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>AniList</p>
+                  <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>{anilistUser.name}</p>
                 </div>
                 <button onClick={disconnectAnilist} title="Disconnect AniList" style={{ backgroundColor: "transparent", color: "var(--text-muted)", padding: "2px" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -941,10 +1190,10 @@ export default function Dashboard() {
               <div style={{ padding: "10px 14px", display: "flex", gap: "10px", alignItems: "center" }}>
                 {traktUser.avatar
                   ? <img src={traktUser.avatar} alt="Trakt" style={{ width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover" }} />
-                  : <div style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "var(--accent-anime)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "#fff", fontWeight: 700 }}>TR</div>}
+                  : <img src="/trakt.svg" alt="Trakt" style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "var(--accent-anime)", objectFit: "contain" }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{traktUser.name || traktUser.username}</p>
-                  <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>Trakt connected</p>
+                  <p style={{ fontSize: "12px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Trakt</p>
+                  <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>{traktUser.name || traktUser.username}</p>
                 </div>
                 <button onClick={disconnectTrakt} title="Disconnect Trakt" style={{ backgroundColor: "transparent", color: "var(--text-muted)", padding: "2px" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -1011,7 +1260,36 @@ export default function Dashboard() {
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
             {activeTab === "expenses" && (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                {timeFilter === "salary" && (
+                <div style={{ display: "flex", gap: "4px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px", marginRight: "12px" }}>
+                  <button
+                    onClick={() => setExpenseTab("ledger")}
+                    style={{
+                      fontSize: "11px", fontWeight: 600, padding: "5px 12px",
+                      backgroundColor: expenseTab === "ledger" ? "#fff" : "transparent",
+                      color: expenseTab === "ledger" ? "var(--text-primary)" : "var(--text-secondary)",
+                      borderRadius: "6px", border: "none", cursor: "pointer",
+                      boxShadow: expenseTab === "ledger" ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    Ledger
+                  </button>
+                  <button
+                    onClick={() => setExpenseTab("subscriptions")}
+                    style={{
+                      fontSize: "11px", fontWeight: 600, padding: "5px 12px",
+                      backgroundColor: expenseTab === "subscriptions" ? "#fff" : "transparent",
+                      color: expenseTab === "subscriptions" ? "var(--text-primary)" : "var(--text-secondary)",
+                      borderRadius: "6px", border: "none", cursor: "pointer",
+                      boxShadow: expenseTab === "subscriptions" ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    Subscriptions
+                  </button>
+                </div>
+
+                {expenseTab === "ledger" && timeFilter === "salary" && (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
                     <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>Cycle Start Day:</span>
                     <select
@@ -1025,19 +1303,21 @@ export default function Dashboard() {
                     </select>
                   </div>
                 )}
-                <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "6px" }}>
-                  <option value="all">All time</option>
-                  <option value="salary">Current Salary Cycle</option>
-                  <option value="30">Last 30 days</option>
-                  <option value="7">Last 7 days</option>
-                </select>
+                {expenseTab === "ledger" && (
+                  <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} style={{ padding: "6px 12px", fontSize: "12px", borderRadius: "6px" }}>
+                    <option value="all">All time</option>
+                    <option value="salary">Current Salary Cycle</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="7">Last 7 days</option>
+                  </select>
+                )}
               </div>
             )}
           </div>
         </header>
 
         {/* ─── EXPENSES TAB ─── */}
-        {activeTab === "expenses" && (
+        {activeTab === "expenses" && expenseTab === "ledger" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "28px" }} className="animate-fade-in">
             <div className="responsive-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
               <div className="stat-card"><span className="label-mono">Total Spent</span><span className="stat-value">₹{totalSpent.toLocaleString("en-IN")}</span><span className="stat-subtext">{timeFilter === "all" ? "All time" : `Last ${timeFilter} days`}</span></div>
@@ -1325,6 +1605,32 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Letterboxd Import */}
+            <div style={{ backgroundColor: "#fff", border: "1px solid var(--border-subtle)", borderRadius: "10px", padding: "14px 18px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+              <img src="/letterboxd.svg" alt="LB" style={{ width: "36px", height: "36px", borderRadius: "50%", objectFit: "contain", backgroundColor: "#14181c" }} />
+              <div style={{ flex: 1, minWidth: "150px" }}>
+                <p style={{ fontSize: "13px", fontWeight: 600 }}>Import Letterboxd</p>
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Upload your Letterboxd CSV (watchlist or watched) to import your movies.</p>
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  ref={fileInputRef} 
+                  style={{ display: "none" }} 
+                  onChange={handleLetterboxdImport} 
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  disabled={isImportingLb} 
+                  className="btn-primary" 
+                  style={{ fontSize: "12px", padding: "8px 16px", whiteSpace: "nowrap", backgroundColor: "#00e054", borderColor: "#00e054", color: "#fff" }}
+                >
+                  {isImportingLb ? "Importing..." : "Upload CSV"}
+                </button>
+              </div>
+            </div>
+
             {/* Content grid */}
             <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "24px" }}>
               {/* Search */}
@@ -1495,17 +1801,230 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* ─── SUBSCRIPTIONS TAB ─── */}
+        {activeTab === "expenses" && expenseTab === "subscriptions" && (
+          <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>Subscriptions</h1>
+            
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px" }}>
+              <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px" }}>
+                <div>
+                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Monthly Burn Rate</p>
+                  <p style={{ fontSize: "32px", fontWeight: 700, color: "var(--text-primary)", marginTop: "4px" }}>
+                    ${subscriptions.reduce((acc, sub) => acc + (sub.billingCycle === "yearly" ? sub.cost / 12 : sub.cost), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div style={{ width: "48px", height: "48px", borderRadius: "12px", backgroundColor: "var(--accent-expense)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/><line x1="2" y1="16" x2="22" y2="16"/></svg>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "20px" }}>
+                <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>Add Subscription</h2>
+                <form onSubmit={addSubscription} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input type="text" placeholder="Name (e.g. Netflix)" value={subName} onChange={(e) => setSubName(e.target.value)} required style={{ flex: 1 }} />
+                    <input type="text" placeholder="Icon (e.g. 🍿)" value={subIcon} onChange={(e) => setSubIcon(e.target.value)} style={{ width: "60px" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input type="number" placeholder="Cost ($)" value={subCost} onChange={(e) => setSubCost(e.target.value)} required step="0.01" style={{ flex: 1 }} />
+                    <select value={subCycle} onChange={(e) => setSubCycle(e.target.value as "monthly" | "yearly")} style={{ flex: 1 }}>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
+                  <input type="date" placeholder="Next Billing Date" value={subNextDate} onChange={(e) => setSubNextDate(e.target.value)} required />
+                  <button type="submit" disabled={isAddingSub} className="btn-primary" style={{ marginTop: "4px" }}>
+                    {isAddingSub ? "Adding..." : "Add Subscription"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: "20px" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>Active Subscriptions</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {subscriptions.map(sub => (
+                  <div key={sub.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", backgroundColor: "var(--bg-body)", borderRadius: "12px" }}>
+                    <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+                      <div style={{ width: "42px", height: "42px", borderRadius: "10px", backgroundColor: "var(--bg-card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
+                        {sub.icon || "💳"}
+                      </div>
+                      <div>
+                        <p style={{ fontWeight: 600, fontSize: "15px" }}>{sub.name}</p>
+                        <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>Next: {sub.nextBillingDate}</p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                      <div style={{ textAlign: "right" }}>
+                        <p style={{ fontWeight: 700, fontSize: "15px" }}>${sub.cost.toFixed(2)}</p>
+                        <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>{sub.billingCycle}</p>
+                      </div>
+                      <button onClick={() => deleteSubscription(sub.id)} style={{ backgroundColor: "transparent", color: "#ef4444", padding: "4px" }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {isFetchingSubscriptions && subscriptions.length === 0 && <p style={{ fontSize: "13px", color: "var(--text-muted)", textAlign: "center", padding: "20px" }}>Loading subscriptions...</p>}
+                {!isFetchingSubscriptions && subscriptions.length === 0 && <p style={{ fontSize: "13px", color: "var(--text-muted)", textAlign: "center", padding: "20px" }}>No subscriptions added.</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+
+        {/* ─── BOOKS TAB ─── */}
+        {activeTab === "books" && (
+          <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>Book Library</h1>
+
+            <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px" }}>
+              <div className="card" style={{ padding: "20px" }}>
+                <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>Search Google Books</h2>
+                <form onSubmit={searchBooks} style={{ display: "flex", gap: "10px" }}>
+                  <input type="text" placeholder="Title, Author..." value={mediaQuery} onChange={(e) => setMediaQuery(e.target.value)} required style={{ flex: 1 }} />
+                  <button type="submit" disabled={isSearchingMedia} className="btn-primary" style={{ whiteSpace: "nowrap" }}>
+                    {isSearchingMedia ? "..." : "Search"}
+                  </button>
+                </form>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "300px", overflowY: "auto", marginTop: "16px" }}>
+                  {searchResults.filter(item => item.type === "book").map((item, i) => (
+                    <div key={i} style={{ display: "flex", gap: "10px", alignItems: "center", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "10px" }}>
+                      {item.coverImage ? <img src={item.coverImage} alt={item.title} style={{ width: "34px", height: "48px", objectFit: "cover", borderRadius: "4px" }} /> : <div style={{ width: "34px", height: "48px", backgroundColor: "var(--bg-secondary)", borderRadius: "4px" }}></div>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
+                        <p style={{ fontSize: "10px", color: "var(--text-secondary)" }}>{item.year || "N/A"}{item.totalEpisodes ? ` · ${item.totalEpisodes} pages` : ""}</p>
+                      </div>
+                      <button onClick={() => addMediaToWatchlist(item)} className="btn-secondary" style={{ padding: "4px 8px", fontSize: "11px", whiteSpace: "nowrap" }}>+ Add</button>
+                    </div>
+                  ))}
+                  {isSearchingMedia && <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "12px" }}>Searching Google Books...</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                <h2 style={{ fontSize: "16px", fontWeight: 600 }}>Your Library</h2>
+                <div style={{ display: "flex", gap: "3px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px" }}>
+                  {(["watching", "plan", "completed"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setWatchlistTab(tab)}
+                      style={{
+                        fontSize: "11px", padding: "5px 10px",
+                        backgroundColor: watchlistTab === tab ? "#fff" : "transparent",
+                        color: watchlistTab === tab ? "var(--text-primary)" : "var(--text-secondary)",
+                        borderRadius: "6px", border: "none", cursor: "pointer",
+                        boxShadow: watchlistTab === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      {tab === "watching" ? "📖 Reading" : tab === "plan" ? "⏳ To Read" : "✅ Done"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "16px" }}>
+                {watchlist
+                  .filter((w) => w.type === "book" && (watchlistTab === "plan" ? w.status === "plan_to_watch" : w.status === watchlistTab))
+                  .map((item) => (
+                    <div key={item.id} className="book-card group" style={{ display: "flex", flexDirection: "column", gap: "8px", position: "relative" }}>
+                      <div style={{ width: "100%", aspectRatio: "2/3", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", overflow: "hidden", position: "relative", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}>
+                        {item.coverImage ? <img src={item.coverImage} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.2s" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "var(--text-muted)", padding: "10px", textAlign: "center" }}>No cover</div>}
+                        
+                        {/* Hover Overlay Actions */}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 gap-2" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)", opacity: 0, transition: "opacity 0.2s", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "8px", gap: "6px" }} onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}>
+                          <select value={item.status} onChange={(e) => updateWatchItem(item, { status: e.target.value as any })} style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "6px", backgroundColor: "rgba(255,255,255,0.9)", border: "none", width: "100%" }}>
+                            <option value="plan_to_watch">To Read</option>
+                            <option value="watching">Reading</option>
+                            <option value="completed">Done</option>
+                          </select>
+                          <button onClick={() => deleteWatchItem(item.id)} style={{ backgroundColor: "#ef4444", color: "#fff", border: "none", borderRadius: "6px", padding: "4px 8px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ minWidth: 0, marginTop: "4px" }}>
+                        <p style={{ fontSize: "13px", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>{item.title}</p>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "4px" }}>
+                          {watchlistTab === "watching" && item.totalEpisodes && (
+                            <div style={{ fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" }}>
+                              <input type="number" value={item.progress} onChange={(e) => updateWatchItem(item, { progress: Number(e.target.value) })} style={{ width: "45px", padding: "3px 6px", fontSize: "11px", borderRadius: "6px", border: "1px solid var(--border-subtle)" }} />
+                              <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>/ {item.totalEpisodes}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {watchlist.filter(w => w.type === "book" && (watchlistTab === "plan" ? w.status === "plan_to_watch" : w.status === watchlistTab)).length === 0 && <p style={{ gridColumn: "1 / -1", fontSize: "13px", color: "var(--text-muted)", textAlign: "center", padding: "20px" }}>No books here.</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+
+
+        {/* ─── NOTES TAB ─── */}
+        {activeTab === "notes" && (
+          <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "16px", height: "calc(100vh - 100px)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h1 style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>Scratchpad</h1>
+              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                {isSavingNote ? "Saving..." : "Saved"}
+              </span>
+            </div>
+
+            <div className="card" style={{ flex: 1, padding: "0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <textarea 
+                value={noteContent} 
+                onChange={(e) => updateNote(e.target.value)} 
+                placeholder="Write your notes here... (Markdown supported mentally)" 
+                style={{ 
+                  flex: 1, padding: "24px", border: "none", resize: "none", 
+                  backgroundColor: "transparent", color: "var(--text-primary)", 
+                  fontSize: "15px", lineHeight: "1.6", outline: "none", fontFamily: "inherit" 
+                }} 
+              />
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="mobile-bottom-nav">
-        <div onClick={() => setActiveTab("expenses")} className={`mobile-nav-link ${activeTab === "expenses" ? "active" : ""}`}>
+      <nav className="mobile-bottom-nav" style={{ overflowX: "auto", justifyContent: "flex-start", padding: "0 8px", gap: "16px" }}>
+        <div onClick={() => setActiveTab("expenses")} className={`mobile-nav-link ${activeTab === "expenses" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
           <span style={{ marginTop: "2px" }}>Ledger</span>
         </div>
-        <div onClick={() => setActiveTab("media")} className={`mobile-nav-link ${activeTab === "media" ? "active" : ""}`}>
+        <div onClick={() => setActiveTab("subscriptions")} className={`mobile-nav-link ${activeTab === "subscriptions" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/><line x1="2" y1="16" x2="22" y2="16"/></svg>
+          <span style={{ marginTop: "2px" }}>Subs</span>
+        </div>
+        <div onClick={() => setActiveTab("habits")} className={`mobile-nav-link ${activeTab === "habits" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span style={{ marginTop: "2px" }}>Habits</span>
+        </div>
+        <div onClick={() => setActiveTab("goals")} className={`mobile-nav-link ${activeTab === "goals" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span style={{ marginTop: "2px" }}>Goals</span>
+        </div>
+        <div onClick={() => setActiveTab("media")} className={`mobile-nav-link ${activeTab === "media" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
           <span style={{ marginTop: "2px" }}>Watchlist</span>
+        </div>
+        <div onClick={() => setActiveTab("books")} className={`mobile-nav-link ${activeTab === "books" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span style={{ marginTop: "2px" }}>Library</span>
+        </div>
+        <div onClick={() => setActiveTab("notes")} className={`mobile-nav-link ${activeTab === "notes" ? "active" : ""}`} style={{ flexShrink: 0, padding: "10px 12px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span style={{ marginTop: "2px" }}>Notes</span>
         </div>
       </nav>
     </div>
