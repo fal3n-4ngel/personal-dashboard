@@ -161,12 +161,14 @@ export function validateWatchlistPatch(body: unknown): Partial<NewWatchlistItem>
 
 export function validateSyncPayload(body: unknown): { source: SyncSource; entries: SyncEntry[] } {
   const b = requireObject(body, "Sync payload");
-  const source = asEnum(b.source, "source", ["anilist", "trakt"] as const, true)!;
-  if (!Array.isArray(b.entries)) badRequest("Field 'entries' must be an array.");
-  const rawEntries = b.entries as unknown[];
-  if (rawEntries.length > MAX_SYNC_ENTRIES) badRequest(`Field 'entries' must contain at most ${MAX_SYNC_ENTRIES} items.`);
+  const source = b.source ? String(b.source).toLowerCase().trim() : "manual";
 
-  const entries = rawEntries.map((raw, i) => {
+  const rawList = Array.isArray(b.entries) ? b.entries : Array.isArray(b.items) ? b.items : null;
+  if (!rawList) badRequest("Field 'entries' (or 'items') must be an array.");
+
+  if (rawList.length > MAX_SYNC_ENTRIES) badRequest(`Field 'entries' or 'items' must contain at most ${MAX_SYNC_ENTRIES} items.`);
+
+  const entries = rawList.map((raw, i) => {
     try {
       const item = validateNewWatchlistItem(raw);
       return {

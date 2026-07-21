@@ -188,7 +188,7 @@ export async function GET() {
         post: {
           operationId: "syncWatchlist",
           summary: "Bulk sync watchlist entries",
-          description: "Sync external entries (AniList, Trakt, Letterboxd CSV) into the watchlist with deduplication.",
+          description: "Sync external entries (AniList, Trakt, Letterboxd CSV, or custom LLM batches) into the watchlist with automatic deduplication.",
           "x-openai-isConsequential": true,
           requestBody: {
             required: true,
@@ -196,12 +196,17 @@ export async function GET() {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["items"],
                   properties: {
-                    source: { type: "string", description: "Optional sync source name (e.g. letterboxd, anilist, trakt)" },
+                    source: { type: "string", description: "Optional sync source name (e.g. letterboxd, anilist, trakt, gpt)" },
                     items: {
                       type: "array",
                       items: { $ref: "#/components/schemas/NewWatchlistItem" },
+                      description: "List of watchlist items (can use 'items' or 'entries')",
+                    },
+                    entries: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/NewWatchlistItem" },
+                      description: "List of watchlist items (alias for 'items')",
                     },
                   },
                 },

@@ -49,7 +49,7 @@ export interface SyncEntry {
   traktId?: number | null;
 }
 
-export type SyncSource = "anilist" | "trakt";
+export type SyncSource = "anilist" | "trakt" | "letterboxd" | "manual" | string;
 
 /* ─── Firestore REST transport ───
  * All reads/writes go through the Firestore REST API authenticated with the
@@ -524,14 +524,22 @@ export async function bulkSyncWatchlist(
   source: SyncSource,
   entries: SyncEntry[]
 ): Promise<{ added: number; updated: number; skipped: number }> {
-  const idField = source === "anilist" ? "anilistId" : "traktId";
+  const idField = source === "anilist" ? "anilistId" : source === "trakt" ? "traktId" : null;
 
   const itemsMap = await getRawWatchlist(session);
   const existingByExternalId = new Map<number, { id: string; item: WatchlistItem }>();
+  const existingByTitleType = new Map<string, { id: string; item: WatchlistItem }>();
+
   Object.entries(itemsMap).forEach(([id, item]) => {
-    const extId = item[idField];
-    if (extId !== undefined && extId !== null) {
-      existingByExternalId.set(Number(extId), { id, item });
+    if (idField) {
+      const extId = item[idField];
+      if (extId !== undefined && extId !== null) {
+        existingByExternalId.set(Number(extId), { id, item });
+      }
+    }
+    if (item.title && item.type) {
+      const key = `${item.type.toLowerCase()}:${item.title.toLowerCase().trim()}`;
+      existingByTitleType.set(key, { id, item });
     }
   });
 
@@ -541,8 +549,13 @@ export async function bulkSyncWatchlist(
   const newIds = new Set<string>();
 
   for (const entry of entries) {
-    const extId = source === "anilist" ? entry.anilistId : entry.traktId;
-    const match = extId !== undefined && extId !== null ? existingByExternalId.get(Number(extId)) : undefined;
+    const extId = source === "anilist" ? entry.anilistId : source === "trakt" ? entry.traktId : null;
+    let match = extId !== undefined && extId !== null ? existingByExternalId.get(Number(extId)) : undefined;
+
+    if (!match && entry.title && entry.type) {
+      const key = `${entry.type.toLowerCase()}:${entry.title.toLowerCase().trim()}`;
+      match = existingByTitleType.get(key);
+    }
 
     if (match) {
       const changed =
