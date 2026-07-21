@@ -64,8 +64,9 @@ interface Subscription {
 interface InvestmentAsset {
   id: string;
   name: string;
-  category: "equity" | "crypto" | "mutual_fund" | "gold" | "cash" | "other";
+  category: "equity" | "crypto" | "mutual_fund" | "sip" | "gold" | "cash" | "other";
   amount: number;
+  investedAmount: number;
   quantity?: number;
   buyPrice?: number;
   currentPrice?: number;
@@ -232,6 +233,9 @@ export default function Dashboard() {
   const [isFetchingInvestments, setIsFetchingInvestments] = useState(false);
   const [isAddingInvestment, setIsAddingInvestment] = useState(false);
   const [invName, setInvName] = useState("");
+  const [invSuggestions, setInvSuggestions] = useState<any[]>([]);
+  const [isSearchingInv, setIsSearchingInv] = useState(false);
+  const [showInvSuggestions, setShowInvSuggestions] = useState(false);
   const [invCategory, setInvCategory] = useState<InvestmentAsset["category"]>("equity");
   const [invAmount, setInvAmount] = useState("");
   const [invQty, setInvQty] = useState("");
@@ -393,6 +397,31 @@ export default function Dashboard() {
       setActiveTab("expenses");
     }
   }, [showInvestmentsTab, activeTab]);
+
+  /* ─── Investment Autocomplete Suggestions Hook ─── */
+  useEffect(() => {
+    if (!invName.trim() || invName.length < 2) {
+      setInvSuggestions([]);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      setIsSearchingInv(true);
+      try {
+        const res = await fetch(`/api/portfolio/search?q=${encodeURIComponent(invName)}`, { headers: getHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setInvSuggestions(data.quotes || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearchingInv(true); // Always set search suggestions active when typing
+        setIsSearchingInv(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(delayDebounce);
+  }, [invName, user]);
 
   /* ─── Fetch data once when user logs in (expenseSearch is filtered client-side, not refetched) ─── */
   useEffect(() => {
@@ -827,14 +856,18 @@ export default function Dashboard() {
     e.preventDefault();
     if (!invName || !invAmount) return;
     setIsAddingInvestment(true);
-    const newAsset = {
+    const qty = invQty ? Number(invQty) : 1;
+    const invested = Number(invAmount);
+    const calcBuyPrice = Math.round((invested / qty) * 100) / 100;
+    const newAsset: InvestmentAsset = {
       id: crypto.randomUUID(),
       name: invName,
       category: invCategory,
-      amount: Number(invAmount),
-      quantity: invQty ? Number(invQty) : undefined,
-      buyPrice: invBuyPrice ? Number(invBuyPrice) : undefined,
-      currentPrice: invCurrentPrice ? Number(invCurrentPrice) : undefined,
+      amount: invested, 
+      investedAmount: invested,
+      quantity: qty,
+      buyPrice: calcBuyPrice,
+      currentPrice: calcBuyPrice, 
       notes: invNotes || undefined,
       createdAt: Date.now(),
     };
@@ -860,35 +893,51 @@ export default function Dashboard() {
   const updateMarketPrices = async () => {
     setIsUpdatingPrices(true);
     setPriceUpdateMsg("Fetching market updates...");
-    setTimeout(async () => {
-      const updated = investments.map(asset => {
-        if (asset.category === "crypto") {
-          const pct = 1 + (Math.random() * 0.12 - 0.05);
-          const current = asset.currentPrice || asset.buyPrice || (asset.amount / (asset.quantity || 1));
-          const newPrice = Math.round(current * pct * 100) / 100;
-          return {
-            ...asset,
-            currentPrice: newPrice,
-            amount: Math.round(newPrice * (asset.quantity || 1))
-          };
-        } else if (asset.category === "equity" || asset.category === "mutual_fund") {
-          const pct = 1 + (Math.random() * 0.06 - 0.02);
-          const current = asset.currentPrice || asset.buyPrice || (asset.amount / (asset.quantity || 1));
-          const newPrice = Math.round(current * pct * 100) / 100;
-          return {
-            ...asset,
-            currentPrice: newPrice,
-            amount: Math.round(newPrice * (asset.quantity || 1))
-          };
-        }
-        return asset;
+    try {
+      const res = await fetch("/api/portfolio/prices", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ assets: investments }),
       });
-      setInvestments(updated);
-      await saveInvestments(updated);
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.assets || [];
+        
+        const processed = updated.map((asset: any) => {
+          let price = asset.currentPrice; 
+          if (currency === "$") {
+            price = asset.currentPriceUsd || (asset.currentPrice / (data.usdToInr || 83.5));
+          } else if (currency === "€") {
+            price = (asset.currentPriceUsd || (asset.currentPrice / (data.usdToInr || 83.5))) * 0.92;
+          } else if (currency === "£") {
+            price = (asset.currentPriceUsd || (asset.currentPrice / (data.usdToInr || 83.5))) * 0.78;
+          } else if (currency === "¥") {
+            price = (asset.currentPriceUsd || (asset.currentPrice / (data.usdToInr || 83.5))) * 155;
+          } else if (currency === "₹") {
+            price = asset.currentPriceInr || asset.currentPrice;
+          }
+          
+          price = Math.round(price * 100) / 100;
+          return {
+            ...asset,
+            currentPrice: price,
+            amount: asset.quantity ? Math.round(price * asset.quantity * 100) / 100 : asset.amount
+          };
+        });
+        
+        setInvestments(processed);
+        await saveInvestments(processed);
+        setPriceUpdateMsg("Real-time prices updated successfully!");
+      } else {
+        setPriceUpdateMsg("Failed to resolve live prices.");
+      }
+    } catch (err) {
+      console.error(err);
+      setPriceUpdateMsg("Failed to connect to API.");
+    } finally {
       setIsUpdatingPrices(false);
-      setPriceUpdateMsg("Simulated market rates updated successfully!");
       setTimeout(() => setPriceUpdateMsg(""), 3000);
-    }, 1200);
+    }
   };
 
   /* ─── Watchlist API ─── */
@@ -2446,28 +2495,40 @@ export default function Dashboard() {
             {/* Investment Summary Cards */}
             <div className="responsive-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
               <div className="stat-card">
-                <span className="label-mono">Total Value</span>
+                <span className="label-mono">Portfolio Value</span>
                 <span className="stat-value">{currency}{investments.reduce((acc, a) => acc + a.amount, 0).toLocaleString()}</span>
-                <span className="stat-subtext">All assets</span>
+                <span className="stat-subtext">Current market valuation</span>
               </div>
               <div className="stat-card">
-                <span className="label-mono">Equities & MFs</span>
+                <span className="label-mono">Total Invested</span>
                 <span className="stat-value" style={{ color: "#3b82f6" }}>
-                  {currency}{investments.filter(a => a.category === "equity" || a.category === "mutual_fund").reduce((acc, a) => acc + a.amount, 0).toLocaleString()}
+                  {currency}{investments.reduce((acc, a) => acc + (a.investedAmount || a.amount), 0).toLocaleString()}
                 </span>
-                <span className="stat-subtext">Stock & Fund holdings</span>
+                <span className="stat-subtext">Capital input cost</span>
               </div>
               <div className="stat-card">
-                <span className="label-mono">Crypto Assets</span>
-                <span className="stat-value" style={{ color: "#b3666b" }}>
-                  {currency}{investments.filter(a => a.category === "crypto").reduce((acc, a) => acc + a.amount, 0).toLocaleString()}
-                </span>
-                <span className="stat-subtext">High volatility holdings</span>
+                {(() => {
+                  const totalVal = investments.reduce((acc, a) => acc + a.amount, 0);
+                  const totalInv = investments.reduce((acc, a) => acc + (a.investedAmount || a.amount), 0);
+                  const profitAmt = totalVal - totalInv;
+                  const profitPct = totalInv ? (profitAmt / totalInv) * 100 : 0;
+                  return (
+                    <>
+                      <span className="label-mono">Total Profit / Loss</span>
+                      <span className="stat-value" style={{ color: profitAmt >= 0 ? "#16a34a" : "#ef4444" }}>
+                        {profitAmt >= 0 ? "+" : ""}{currency}{profitAmt.toLocaleString()}
+                      </span>
+                      <span className="stat-subtext" style={{ color: profitAmt >= 0 ? "#16a34a" : "#ef4444", fontWeight: 700 }}>
+                        {profitAmt >= 0 ? "+" : ""}{profitPct.toFixed(1)}% Return
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
               <div className="stat-card">
-                <span className="label-mono">Total Assets Count</span>
+                <span className="label-mono">Holdings Count</span>
                 <span className="stat-value" style={{ fontSize: "22px", marginTop: "8px" }}>{investments.length}</span>
-                <span className="stat-subtext">Holdings logged</span>
+                <span className="stat-subtext">Active assets logged</span>
               </div>
             </div>
 
@@ -2476,23 +2537,66 @@ export default function Dashboard() {
               <div className="bento-card" style={{ height: "fit-content" }}>
                 <span className="label-mono" style={{ marginBottom: "14px", display: "block" }}>Add Asset</span>
                 <form onSubmit={addInvestment} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <input type="text" value={invName} onChange={(e) => setInvName(e.target.value)} placeholder="Asset Name (e.g. BTC, Apple)" required />
+                  <div style={{ position: "relative" }}>
+                    <input 
+                      type="text" 
+                      value={invName} 
+                      onChange={(e) => { setInvName(e.target.value); setShowInvSuggestions(true); }} 
+                      onFocus={() => setShowInvSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowInvSuggestions(false), 200)}
+                      placeholder="Asset Name (e.g. BTC, Apple)" 
+                      required 
+                    />
+                    {showInvSuggestions && invSuggestions.length > 0 && (
+                      <div style={{
+                        position: "absolute", top: "100%", left: 0, right: 0,
+                        backgroundColor: "#fff", border: "1px solid var(--border-subtle)",
+                        borderRadius: "8px", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                        zIndex: 50, maxHeight: "200px", overflowY: "auto", marginTop: "4px"
+                      }}>
+                        {invSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.symbol}
+                            onClick={() => {
+                              setInvName(suggestion.symbol);
+                              setInvNotes(suggestion.name);
+                              const type = suggestion.type;
+                              if (type === 'CRYPTOCURRENCY') setInvCategory('crypto');
+                              else if (type === 'MUTUALFUND') setInvCategory('mutual_fund');
+                              else setInvCategory('equity');
+                              setShowInvSuggestions(false);
+                            }}
+                            style={{
+                              padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border-subtle)",
+                              display: "flex", justifyContent: "space-between", alignItems: "center"
+                            }}
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: "12px" }}>{suggestion.symbol}</div>
+                              <div style={{ fontSize: "10px", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}>{suggestion.name}</div>
+                            </div>
+                            <span style={{ fontSize: "9px", backgroundColor: "var(--bg-secondary)", padding: "2px 6px", borderRadius: "4px", textTransform: "uppercase", flexShrink: 0 }}>
+                              {suggestion.type?.toLowerCase().replace('currency', '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   
                   <select value={invCategory} onChange={(e) => setInvCategory(e.target.value as any)} required style={{ width: "100%" }}>
                     <option value="equity">Equity (Stock)</option>
                     <option value="crypto">Cryptocurrency</option>
                     <option value="mutual_fund">Mutual Fund</option>
+                    <option value="sip">SIP (Systematic Plan)</option>
                     <option value="gold">Gold</option>
                     <option value="cash">Cash / Liquid</option>
                     <option value="other">Other Asset</option>
                   </select>
 
-                  <input type="number" value={invAmount} onChange={(e) => setInvAmount(e.target.value)} placeholder={`Total Value (${currency})`} required />
-                  
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    <input type="number" value={invQty} onChange={(e) => setInvQty(e.target.value)} placeholder="Qty (optional)" step="any" />
-                    <input type="number" value={invBuyPrice} onChange={(e) => setInvBuyPrice(e.target.value)} placeholder="Buy price (opt)" step="any" />
-                  </div>
+                  <input type="number" value={invAmount} onChange={(e) => setInvAmount(e.target.value)} placeholder={`Invested Amount (${currency})`} required />
+                  <input type="number" value={invQty} onChange={(e) => setInvQty(e.target.value)} placeholder="Quantity Owned" step="any" required />
 
                   <input type="text" value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="Notes (optional)" />
 
@@ -2513,16 +2617,21 @@ export default function Dashboard() {
                           <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "left" }}>Asset</th>
                           <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "left" }}>Category</th>
                           <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Quantity</th>
-                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Market Price</th>
-                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Total value</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Avg Buy</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Live Price</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Invested</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>Current Value</th>
+                          <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "right" }}>P&L</th>
                           <th style={{ paddingBottom: "10px", fontWeight: 500, textAlign: "center" }}></th>
                         </tr>
                       </thead>
                       <tbody>
                         {investments.map((a) => {
                           const currentVal = a.amount;
-                          const avgCost = a.buyPrice || 0;
+                          const invested = a.investedAmount || a.amount;
+                          const avgCost = a.buyPrice || (invested / (a.quantity || 1));
                           const profitPct = avgCost && a.currentPrice ? ((a.currentPrice - avgCost) / avgCost) * 100 : 0;
+                          const profitAmt = currentVal - invested;
                           return (
                             <tr key={a.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
                               <td style={{ padding: "12px 0", fontWeight: 600 }}>
@@ -2535,15 +2644,18 @@ export default function Dashboard() {
                                 </span>
                               </td>
                               <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>{a.quantity !== undefined ? a.quantity : "—"}</td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>{currency}{avgCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>
-                                <div>{a.currentPrice !== undefined ? `${currency}${a.currentPrice.toLocaleString()}` : "—"}</div>
-                                {profitPct !== 0 && (
-                                  <div style={{ fontSize: "10px", color: profitPct >= 0 ? "#16a34a" : "#ef4444", fontWeight: 600, marginTop: "2px" }}>
-                                    {profitPct >= 0 ? "+" : ""}{profitPct.toFixed(1)}%
-                                  </div>
-                                )}
+                                {a.currentPrice !== undefined ? `${currency}${a.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                               </td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontFamily: "monospace" }}>{currency}{invested.toLocaleString()}</td>
                               <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 700 }}>{currency}{currentVal.toLocaleString()}</td>
+                              <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 600, color: profitAmt >= 0 ? "#16a34a" : "#ef4444" }}>
+                                <div>{profitAmt >= 0 ? "+" : ""}{currency}{profitAmt.toLocaleString()}</div>
+                                <div style={{ fontSize: "10px", fontWeight: 700, marginTop: "2px" }}>
+                                  {profitAmt >= 0 ? "+" : ""}{profitPct.toFixed(1)}%
+                                </div>
+                              </td>
                               <td style={{ padding: "12px 0", textAlign: "center" }}>
                                 <button onClick={() => deleteInvestment(a.id)} style={{ backgroundColor: "transparent", color: "#ef4444", fontSize: "11px", padding: "2px 8px" }}>Delete</button>
                               </td>
@@ -2552,7 +2664,13 @@ export default function Dashboard() {
                         })}
                         {investments.length === 0 && (
                           <tr>
-                            <td colSpan={6} style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>No investment assets logged.</td>
+                            <td colSpan={6} style={{ textAlign: "center", padding: "60px 20px" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", color: "var(--text-muted)" }}>
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                <span style={{ fontSize: "14px", fontWeight: 500 }}>No assets logged yet</span>
+                                <span style={{ fontSize: "11px" }}>Use the panel on the left to add your first stock, crypto, or mutual fund holding.</span>
+                              </div>
+                            </td>
                           </tr>
                         )}
                       </tbody>
