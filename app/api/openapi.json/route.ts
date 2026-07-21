@@ -3,8 +3,8 @@ import { AUTHOR, SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-static";
 
-// OpenAPI 3.1 spec consumed by ChatGPT Custom GPT Actions (imported from
-// /api/openapi.json). Keep operationIds stable — GPT actions reference them.
+// OpenAPI 3.1 spec consumed by ChatGPT Custom GPT Actions, Claude Projects, and
+// AI Agent integrations (imported from /api/openapi.json). Keep operationIds stable.
 export async function GET() {
   const errorResponse = (description: string) => ({
     description,
@@ -35,9 +35,9 @@ export async function GET() {
       title: "Personal Dashboard API",
       description:
         "API for a personal expense ledger, subscription tracker, investment portfolio, movie/show/anime/book watchlist, " +
-        "and scratchpad notes, backed by Firestore. Every request must carry the user's Firebase ID token as a Bearer token; " +
-        "all data is scoped to that user. Self-hosted deployments configure Firebase via the FIREBASE_CONFIG environment variable.",
-      version: "2.1.0",
+        "and scratchpad notes, backed by Firestore. Every request must carry the user's Firebase ID token or Permanent API Key as a Bearer token; " +
+        "all data is scoped to that user.",
+      version: "2.2.0",
       contact: { name: AUTHOR.name, url: AUTHOR.url, email: AUTHOR.email },
     },
     servers: [
@@ -92,34 +92,22 @@ export async function GET() {
                       type: "array",
                       description: "Optional list of multiple expenses to create in batch",
                       items: {
-                        $ref: "#/components/schemas/ExpenseEntry"
-                      }
-                    }
-                  }
+                        $ref: "#/components/schemas/ExpenseEntry",
+                      },
+                    },
+                  },
                 },
               },
             },
           },
-          responses: writeResult("Expense(s) created"),
+          responses: writeResult("Expense(s) logged"),
         },
       },
       "/api/expenses/{id}": {
-        patch: {
-          operationId: "updateExpense",
-          summary: "Update an expense",
-          description: "Update one or more fields of an existing expense. Only the provided fields change.",
-          "x-openai-isConsequential": false,
-          parameters: [idParam("expense")],
-          requestBody: {
-            required: true,
-            content: { "application/json": { schema: { $ref: "#/components/schemas/ExpenseEntryPatch" } } },
-          },
-          responses: writeResult("Expense updated"),
-        },
         delete: {
           operationId: "deleteExpense",
           summary: "Delete an expense",
-          description: "Permanently delete an expense record.",
+          description: "Archive / remove an expense transaction permanently.",
           "x-openai-isConsequential": true,
           parameters: [idParam("expense")],
           responses: writeResult("Expense deleted"),
@@ -129,12 +117,12 @@ export async function GET() {
         get: {
           operationId: "listExpenseCategories",
           summary: "List expense categories",
-          description: "Return the distinct category names used by the user's expenses. Prefer reusing one of these when logging.",
+          description: "Retrieve all distinct category names used by the user in expense transactions.",
           "x-openai-isConsequential": false,
           responses: {
             "200": {
-              description: "List of categories",
-              content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/Category" } } } },
+              description: "Array of category names",
+              content: { "application/json": { schema: { type: "array", items: { type: "string" } } } },
             },
             "401": errorResponse("Missing or invalid authentication token"),
           },
@@ -144,7 +132,9 @@ export async function GET() {
         get: {
           operationId: "listWatchlistItems",
           summary: "List watchlist items",
-          description: "Retrieve the user's movies, shows, anime, and books, most recently updated first. Supports filtering by type or status, plus pagination (limit/offset) to prevent large payloads.",
+          description:
+            "Retrieve the user's movies, shows, anime, and books, most recently updated first. " +
+            "Supports filtering by type or status, plus pagination (limit/offset) to prevent large payloads.",
           "x-openai-isConsequential": false,
           parameters: [
             { name: "type", in: "query", required: false, description: "Filter by media type: 'movie', 'show', 'anime', or 'book'", schema: { type: "string", enum: ["movie", "show", "anime", "book"] } },
@@ -163,7 +153,7 @@ export async function GET() {
         post: {
           operationId: "addWatchlistItem",
           summary: "Add a watchlist item",
-          description: "Add a movie, show, or anime to the watchlist. Check listWatchlistItems first to avoid duplicates.",
+          description: "Add a movie, show, anime, or book to the watchlist. Check listWatchlistItems first to avoid duplicates.",
           "x-openai-isConsequential": false,
           requestBody: {
             required: true,
@@ -188,10 +178,37 @@ export async function GET() {
         delete: {
           operationId: "deleteWatchlistItem",
           summary: "Delete a watchlist item",
-          description: "Permanently remove an item from the watchlist.",
+          description: "Remove an item from the watchlist.",
           "x-openai-isConsequential": true,
           parameters: [idParam("watchlist item")],
           responses: writeResult("Watchlist item deleted"),
+        },
+      },
+      "/api/watchlist/sync": {
+        post: {
+          operationId: "syncWatchlist",
+          summary: "Bulk sync watchlist entries",
+          description: "Sync external entries (AniList, Trakt, Letterboxd CSV) into the watchlist with deduplication.",
+          "x-openai-isConsequential": true,
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["items"],
+                  properties: {
+                    source: { type: "string", description: "Optional sync source name (e.g. letterboxd, anilist, trakt)" },
+                    items: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/NewWatchlistItem" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: writeResult("Watchlist entries synced"),
         },
       },
       "/api/subscriptions": {
@@ -224,7 +241,7 @@ export async function GET() {
         patch: {
           operationId: "updateSubscription",
           summary: "Update a subscription",
-          description: "Update one or more fields of an existing subscription. Only the provided fields change.",
+          description: "Update one or more fields of an existing subscription (e.g. cost, nextBillingDate, billingCycle). Only provided fields change.",
           "x-openai-isConsequential": false,
           parameters: [idParam("subscription")],
           requestBody: {
@@ -260,15 +277,91 @@ export async function GET() {
           operationId: "replacePortfolioAssets",
           summary: "Replace the portfolio's assets",
           description:
-            "Replace the entire assets list with the array provided — this is a full replace, not a per-asset patch. " +
-            "To add or edit one asset: call getPortfolio first, modify the one asset client-side, and send the whole assets array back " +
-            "(including every unchanged asset with its existing id).",
+            "Replace the entire assets list with the array provided — this is a full replace, not a per-asset patch.",
           "x-openai-isConsequential": true,
           requestBody: {
             required: true,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PortfolioUpdate" } } },
           },
           responses: writeResult("Portfolio updated"),
+        },
+      },
+      "/api/portfolio/prices": {
+        post: {
+          operationId: "refreshPortfolioPrices",
+          summary: "Refresh portfolio market prices",
+          description: "Fetch live market prices from Binance (crypto) and Yahoo Finance (stocks/mutual funds) to update asset valuations.",
+          "x-openai-isConsequential": false,
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    assets: { type: "array", items: { $ref: "#/components/schemas/InvestmentAsset" } },
+                    forceRefresh: { type: "boolean", description: "Bypass 5-minute cache" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Updated assets with live prices and conversion rates",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      assets: { type: "array", items: { $ref: "#/components/schemas/InvestmentAsset" } },
+                      usdToInr: { type: "number" },
+                      cooldownActive: { type: "boolean" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": errorResponse("Missing or invalid authentication token"),
+          },
+        },
+      },
+      "/api/portfolio/search": {
+        get: {
+          operationId: "searchPortfolioSymbols",
+          summary: "Search stock & crypto symbols",
+          description: "Autocomplete stock tickers, mutual funds, or crypto pairs via Yahoo Finance.",
+          "x-openai-isConsequential": false,
+          parameters: [
+            { name: "q", in: "query", required: true, schema: { type: "string" }, description: "Search query string (e.g. AAPL, BTC, RELIANCE)" },
+          ],
+          responses: {
+            "200": {
+              description: "List of matching symbols",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      quotes: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            symbol: { type: "string" },
+                            name: { type: "string" },
+                            exchange: { type: "string" },
+                            type: { type: "string" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": errorResponse("Missing or invalid authentication token"),
+          },
         },
       },
       "/api/notes": {
@@ -305,8 +398,8 @@ export async function GET() {
           scheme: "bearer",
           bearerFormat: "JWT",
           description:
-            "Firebase ID token of the signed-in user. In ChatGPT Actions choose Authentication → API Key → Bearer and paste the token. " +
-            "Tokens expire after ~1 hour; copy a fresh one from the dashboard's GPT Integration page when requests start returning 401.",
+            "Bearer token supporting both Firebase ID tokens and Permanent API Keys. " +
+            "In ChatGPT Actions, Gemini Gems, or Claude Projects, choose Authentication → API Key → Bearer and paste your token or Permanent API Key.",
         },
       },
       schemas: {
@@ -321,29 +414,6 @@ export async function GET() {
             notes: { type: "string", maxLength: 1000, description: "Optional free-form notes", examples: ["Ride back from airport"] },
           },
         },
-        ExpenseBatch: {
-          type: "object",
-          required: ["items"],
-          properties: {
-            items: {
-              type: "array",
-              maxItems: 100,
-              items: { $ref: "#/components/schemas/ExpenseEntry" },
-              description: "Multiple expense entries to log in one call",
-            },
-          },
-        },
-        ExpenseEntryPatch: {
-          type: "object",
-          description: "Any subset of expense fields to change.",
-          properties: {
-            title: { type: "string", maxLength: 200 },
-            amount: { type: "number" },
-            category: { type: ["string", "null"], maxLength: 100 },
-            date: { type: ["string", "null"], format: "date" },
-            notes: { type: ["string", "null"], maxLength: 1000 },
-          },
-        },
         ExpenseRecord: {
           type: "object",
           properties: {
@@ -354,13 +424,6 @@ export async function GET() {
             date: { type: ["string", "null"], format: "date" },
             notes: { type: ["string", "null"] },
             createdAt: { type: "integer", description: "Creation time (Unix ms)" },
-          },
-        },
-        Category: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            name: { type: "string" },
           },
         },
         WatchlistItem: {
