@@ -48,11 +48,17 @@ function getYahooTicker(name: string): string {
   return clean;
 }
 
+interface AssetPriceInput {
+  category?: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await requireUser(req);
     const body = await req.json();
-    const assets = body?.assets || [];
+    const assets: AssetPriceInput[] = body?.assets || [];
     const forceRefresh = !!body?.forceRefresh;
     
     const uid = session.uid;
@@ -89,9 +95,9 @@ export async function POST(req: NextRequest) {
       console.warn("Failed to fetch exchange rate, using fallback 83.5:", e);
     }
 
-    const updatedAssets = await Promise.all(assets.map(async (asset: any) => {
+    const updatedAssets = await Promise.all(assets.map(async (asset) => {
       const category = asset.category;
-      const name = asset.name;
+      const name = asset.name || "";
       const cacheKey = `${category}:${name}`;
       
       // Return cached price if valid and we're not doing a valid forceRefresh

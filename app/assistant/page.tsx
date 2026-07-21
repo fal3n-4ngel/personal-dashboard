@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import type { Auth, GoogleAuthProvider as GoogleAuthProviderClass, signInWithPopup as signInWithPopupFn } from "firebase/auth";
 import { SITE_URL } from "@/lib/site";
+import { useOrigin } from "@/hooks/useOrigin";
 
 /* ─── AI Assistant Integration Guide ───
  * Walks through connecting the dashboard API to a Custom Agent (ChatGPT Custom GPT, Gemini Gems, Claude Projects, etc.) via Actions:
@@ -13,18 +16,22 @@ interface AgentUser {
   email: string;
 }
 
+interface AuthApi {
+  auth: Auth;
+  GoogleAuthProvider: typeof GoogleAuthProviderClass;
+  signInWithPopup: typeof signInWithPopupFn;
+}
+
 export default function AssistantIntegrationPage() {
-  const [authApi, setAuthApi] = useState<any>(null);
+  const [authApi, setAuthApi] = useState<AuthApi | null>(null);
   const [user, setUser] = useState<AgentUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
-  const [origin, setOrigin] = useState("");
+  const origin = useOrigin();
   const [copied, setCopied] = useState<string>("");
   const [tokenBusy, setTokenBusy] = useState(false);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
-
     let unsubscribe: (() => void) | null = null;
     (async () => {
       try {
@@ -45,8 +52,8 @@ export default function AssistantIntegrationPage() {
           setUser(fbUser ? { displayName: fbUser.displayName, email: fbUser.email || "" } : null);
           setAuthLoading(false);
         });
-      } catch (err: any) {
-        setAuthError(err.message);
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : "Could not load Firebase configuration.");
         setAuthLoading(false);
       }
     })();
@@ -85,8 +92,8 @@ export default function AssistantIntegrationPage() {
     if (!authApi) return;
     try {
       await authApi.signInWithPopup(authApi.auth, new authApi.GoogleAuthProvider());
-    } catch (e: any) {
-      setAuthError(e.message);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "Sign-in failed.");
     }
   }
 
@@ -135,7 +142,7 @@ Always confirm what you logged in one short line. Never invent ids — fetch the
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 22H22L12 2ZM12 6L18.8 19.6H5.2L12 6Z" fill="var(--text-primary)"/></svg>
             <span style={{ fontSize: "19px", fontWeight: 700, letterSpacing: "-0.5px" }}>PHub Dashboard</span>
           </div>
-          <a href="/" className="nav-link" style={{ marginBottom: 0 }}>← Back to dashboard</a>
+          <Link href="/" className="nav-link" style={{ marginBottom: 0 }}>← Back to dashboard</Link>
         </div>
 
         <div>
@@ -210,8 +217,9 @@ Always confirm what you logged in one short line. Never invent ids — fetch the
               </button>
             )}
 
-            <div style={{ marginTop: "14px", backgroundColor: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#065f46", lineHeight: 1.6 }}>
-              <strong>Tokens are persistent.</strong> The generated token is long-lived and stays active until explicitly revoked or refreshed. Treat the token like a password — do not share your custom agent.
+            <div style={{ marginTop: "14px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#92400e", lineHeight: 1.6 }}>
+              <strong>Tokens expire after about an hour.</strong> When your agent starts getting &ldquo;Unauthorized&rdquo; errors,
+              come back here and copy a fresh one. Treat the token like a password — do not share your custom agent.
             </div>
           </div>
         </div>

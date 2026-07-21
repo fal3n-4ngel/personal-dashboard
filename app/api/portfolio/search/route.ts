@@ -3,6 +3,14 @@ import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+interface YahooQuote {
+  symbol?: string;
+  shortname?: string;
+  longname?: string;
+  exchange?: string;
+  quoteType?: string;
+}
+
 export async function GET(req: NextRequest) {
   try {
     await requireUser(req);
@@ -18,7 +26,8 @@ export async function GET(req: NextRequest) {
     
     if (res.ok) {
       const data = await res.json();
-      const quotes = (data?.quotes || []).map((q: any) => ({
+      const rawQuotes = (data?.quotes || []) as YahooQuote[];
+      const quotes = rawQuotes.map((q) => ({
         symbol: q.symbol,
         name: q.shortname || q.longname || q.symbol,
         exchange: q.exchange,

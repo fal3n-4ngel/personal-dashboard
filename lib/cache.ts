@@ -8,7 +8,7 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-const store = new Map<string, CacheEntry<any>>();
+const store = new Map<string, CacheEntry<unknown>>();
 
 export function cacheGet<T>(key: string): T | undefined {
   const entry = store.get(key);

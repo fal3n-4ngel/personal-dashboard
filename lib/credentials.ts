@@ -18,7 +18,7 @@ export function parseFirebaseConfig(credentials: Credentials): FirebaseWebConfig
     throw new ApiError(500, "Firebase is not configured on this server.");
   }
 
-  let config: any;
+  let config: Record<string, unknown>;
   try {
     config = JSON.parse(credentials.firebaseConfig);
   } catch {
@@ -32,7 +32,7 @@ export function parseFirebaseConfig(credentials: Credentials): FirebaseWebConfig
     throw new ApiError(400, "Firebase configuration is missing a valid 'projectId'.");
   }
 
-  return config as FirebaseWebConfig;
+  return config as unknown as FirebaseWebConfig;
 }
 
 export interface Credentials {

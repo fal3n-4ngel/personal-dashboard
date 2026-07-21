@@ -21,9 +21,14 @@ const CLOCK_ZONES: { label: string; region: string; zone: string }[] = [
 function useTicker() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
+    const update = () => setNow(new Date());
+    const id = setInterval(update, 1000);
+    // Ticks once almost immediately (rather than waiting a full second for
+    // setInterval's first callback) — deferred via setTimeout(0) rather than
+    // called synchronously here, so this is still "setState in a callback",
+    // not "setState synchronously within an effect".
+    const kick = setTimeout(update, 0);
+    return () => { clearInterval(id); clearTimeout(kick); };
   }, []);
   return now;
 }
@@ -112,9 +117,31 @@ function BentoLogo({ size = 22, color = "currentColor" }: { size?: number; color
   );
 }
 
+interface DiagramPoint {
+  x: number;
+  y: number;
+}
+
+interface DiagramCoords {
+  c1_1: DiagramPoint;
+  c1_2: DiagramPoint;
+  c2_1: DiagramPoint;
+  c2_2: DiagramPoint;
+  c2_3: DiagramPoint;
+  c2_1_r: DiagramPoint;
+  c2_2_r: DiagramPoint;
+  c2_3_r: DiagramPoint;
+  hub_l: DiagramPoint;
+  hub_r: DiagramPoint;
+  c4_1: DiagramPoint;
+  c4_2: DiagramPoint;
+  midX: number;
+  midY: number;
+}
+
 export default function LandingPage({ onLogin, authError, firebaseAuthReady }: LandingPageProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [coords, setCoords] = useState<any>(null);
+  const [coords, setCoords] = useState<DiagramCoords | null>(null);
 
   useEffect(() => {
     const updateCoords = () => {
@@ -1749,7 +1776,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
               </li>
               <li className="gpt-check-item">
                 <span className="gpt-check-icon">✓</span>
-                Natural language recognition — "I spent 400 on transit" maps instantly
+                Natural language recognition — &ldquo;I spent 400 on transit&rdquo; maps instantly
               </li>
             </ul>
             <a href="/gpt" className="hero-cta-primary" style={{ display: "inline-flex" }}>
@@ -1991,7 +2018,7 @@ export default function LandingPage({ onLogin, authError, firebaseAuthReady }: L
           </div>
 
           <div className="footer-clocks-row">
-            <span className="footer-col-label" style={{ marginBottom: "0" }}>Wherever you're tracking from</span>
+            <span className="footer-col-label" style={{ marginBottom: "0" }}>Wherever you&apos;re tracking from</span>
             <LiveClockStrip />
           </div>
 

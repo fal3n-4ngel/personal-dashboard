@@ -45,14 +45,14 @@ export async function POST(req: NextRequest) {
       throw new ApiError(500, "Trakt client ID is not configured.");
     }
 
-    let body: any;
+    let body: unknown;
     try {
       body = await req.json();
     } catch {
       throw new ApiError(400, "Invalid JSON body");
     }
 
-    const { path, method, token, body: forwardBody } = body || {};
+    const { path, method, token, body: forwardBody } = (body || {}) as Record<string, unknown>;
     const url = resolveTraktUrl(path);
 
     const upstreamMethod = typeof method === "string" ? method.toUpperCase() : "GET";

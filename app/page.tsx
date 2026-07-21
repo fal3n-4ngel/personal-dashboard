@@ -1,264 +1,37 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import LandingPage from "./components/LandingPage";
+import type {
+  Auth,
+  GoogleAuthProvider as GoogleAuthProviderClass,
+  signInWithPopup as signInWithPopupFn,
+  signInWithRedirect as signInWithRedirectFn,
+  signOut as signOutFn,
+} from "firebase/auth";
+import LandingPage from "@/components/landing/LandingPage";
+import type {
+  AniListUser,
+  Expense,
+  FirebaseUser,
+  InvestmentAsset,
+  InvestmentQuote,
+  SearchResult,
+  Subscription,
+  TraktUser,
+  WatchlistItem,
+} from "@/types";
+import { anilistQuery, ANILIST_STATUS_MAP, TO_ANILIST_STATUS_MAP } from "@/lib/anilist";
+import { TRAKT_CLIENT_ID, traktRequest } from "@/lib/trakt-client";
+import { getSubLogoUrl } from "@/lib/subscription-logos";
+import { getNextFutureBillingDate, getSalaryCycleRange } from "@/lib/dates";
+import { friendlyAuthErrorMessage, POPUP_FALLBACK_CODES } from "@/lib/auth-errors";
 
-/* ─── Types ─── */
-interface FirebaseUser {
-  uid: string;
-  email: string;
-  displayName: string | null;
-  photoURL: string | null;
-  idToken: string;
-}
-
-interface AniListUser {
-  id: number;
-  name: string;
-  avatar: string | null;
-  token: string;
-}
-
-interface TraktUser {
-  username: string;
-  name: string | null;
-  avatar: string | null;
-  accessToken: string;
-  refreshToken: string;
-}
-
-interface Expense {
-  id: string;
-  title: string;
-  amount: number | null;
-  category: string | null;
-  date: string | null;
-  notes: string | null;
-}
-
-interface WatchlistItem {
-  id: string;
-  title: string;
-  type: "movie" | "show" | "anime" | "book";
-  status: "plan_to_watch" | "watching" | "completed" | "dropped";
-  progress: number;
-  totalEpisodes: number | null;
-  rating: number | null;
-  coverImage: string | null;
-  year: number | null;
-  updatedAt: number;
-  anilistId?: number | null; // store AniList media ID for sync
-  traktId?: number | null; // store Trakt media ID for sync
-}
-
-interface Subscription {
-  id: string;
-  name: string;
-  cost: number;
-  billingCycle: "monthly" | "yearly";
-  nextBillingDate: string;
-  icon: string | null;
-  createdAt: number;
-}
-
-interface InvestmentAsset {
-  id: string;
-  name: string;
-  category: "equity" | "crypto" | "mutual_fund" | "sip" | "gold" | "cash" | "other";
-  amount: number;
-  investedAmount: number;
-  quantity?: number;
-  buyPrice?: number;
-  currentPrice?: number;
-  notes?: string;
-  createdAt: number;
-}
-
-interface Habit {
-  id: string;
-  name: string;
-  icon: string | null;
-  frequency: "daily" | "weekly";
-  completions: string[]; // array of YYYY-MM-DD
-  createdAt: number;
-}
-
-interface Note {
-  content: string;
-  updatedAt: number;
-}
-
-interface Goal {
-  id: string;
-  title: string;
-  targetAmount: number;
-  currentAmount: number;
-  unit: string;
-  deadline: string | null;
-  color: string;
-  createdAt: number;
-}
-
-interface SearchResult {
-  title: string;
-  type: "movie" | "show" | "anime" | "book";
-  totalEpisodes: number | null;
-  coverImage: string | null;
-  year: number | null;
-  anilistId?: number | null;
-  traktId?: number | null;
-}
-
-function getNextFutureBillingDate(dateStr: string, cycle: string): string {
-  if (!dateStr) return "";
-  try {
-    let date = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (isNaN(date.getTime())) return dateStr;
-    while (date < today) {
-      if (cycle === "monthly") {
-        date.setMonth(date.getMonth() + 1);
-      } else if (cycle === "yearly") {
-        date.setFullYear(date.getFullYear() + 1);
-      } else if (cycle === "weekly") {
-        date.setDate(date.getDate() + 7);
-      } else {
-        break;
-      }
-    }
-    return date.toISOString().slice(0, 10);
-  } catch {
-    return dateStr;
-  }
-}
-
-/** Maps common subscription name patterns to their Clearbit logo domain */
-const SUB_LOGO_MAP: [RegExp, string][] = [
-  [/netflix/i,                        "netflix.com"],
-  [/spotify/i,                        "spotify.com"],
-  [/youtube|yt\s*premium/i,           "youtube.com"],
-  [/amazon\s*prime|prime\s*video/i,   "amazon.com"],
-  [/hotstar|disney\+?\s*hotstar/i,    "hotstar.com"],
-  [/disney\+?/i,                      "disneyplus.com"],
-  [/apple\s*tv/i,                     "tv.apple.com"],
-  [/apple\s*music/i,                  "music.apple.com"],
-  [/icloud/i,                         "icloud.com"],
-  [/apple/i,                          "apple.com"],
-  [/hbo\s*max|^max$/i,                "max.com"],
-  [/hulu/i,                           "hulu.com"],
-  [/paramount\+?/i,                   "paramountplus.com"],
-  [/peacock/i,                        "peacocktv.com"],
-  [/mubi/i,                           "mubi.com"],
-  [/crunchyroll/i,                    "crunchyroll.com"],
-  [/sonyliv|sony\s*liv/i,             "sonyliv.com"],
-  [/zee5/i,                           "zee5.com"],
-  [/jiocinema|jio\s*cinema/i,         "jiocinema.com"],
-  [/microsoft\s*365|office\s*365|m365/i, "microsoft.com"],
-  [/xbox/i,                           "xbox.com"],
-  [/playstation|ps\s*plus|psn/i,      "playstation.com"],
-  [/nintendo/i,                       "nintendo.com"],
-  [/adobe/i,                          "adobe.com"],
-  [/figma/i,                          "figma.com"],
-  [/notion/i,                         "notion.so"],
-  [/slack/i,                          "slack.com"],
-  [/zoom/i,                           "zoom.us"],
-  [/dropbox/i,                        "dropbox.com"],
-  [/google\s*one/i,                   "one.google.com"],
-  [/google\s*workspace/i,             "workspace.google.com"],
-  [/github/i,                         "github.com"],
-  [/linear/i,                         "linear.app"],
-  [/openai|chatgpt/i,                 "openai.com"],
-  [/claude|anthropic/i,               "anthropic.com"],
-  [/1password/i,                      "1password.com"],
-  [/lastpass/i,                       "lastpass.com"],
-  [/nordvpn/i,                        "nordvpn.com"],
-  [/expressvpn/i,                     "expressvpn.com"],
-  [/canva/i,                          "canva.com"],
-  [/audible/i,                        "audible.com"],
-  [/medium/i,                         "medium.com"],
-  [/substack/i,                       "substack.com"],
-  [/duolingo/i,                       "duolingo.com"],
-  [/linkedin/i,                       "linkedin.com"],
-  [/coursera/i,                       "coursera.org"],
-  [/udemy/i,                          "udemy.com"],
-  [/tidal/i,                          "tidal.com"],
-  [/deezer/i,                         "deezer.com"],
-  [/soundcloud/i,                     "soundcloud.com"],
-  [/twitch/i,                         "twitch.tv"],
-  [/discord/i,                        "discord.com"],
-  [/setapp/i,                         "setapp.com"],
-  [/grammarly/i,                      "grammarly.com"],
-  [/bitwarden/i,                      "bitwarden.com"],
-  [/vercel/i,                         "vercel.com"],
-  [/netlify/i,                        "netlify.com"],
-  [/supabase/i,                       "supabase.com"],
-  [/raycast/i,                        "raycast.com"],
-];
-
-const LOGO_DEV_TOKEN = "pk_abFC_FBeQnCIIvPXLpp7JA";
-
-function getSubLogoUrl(name: string): string | null {
-  for (const [pattern, domain] of SUB_LOGO_MAP) {
-    if (pattern.test(name))
-      return `https://img.logo.dev/${domain}?token=${LOGO_DEV_TOKEN}&size=40&format=png`;
-  }
-  return null;
-}
-
-/* ─── AniList GraphQL helper ─── */
-const ANILIST_GQL = "https://graphql.anilist.co";
-
-async function anilistQuery(query: string, variables: Record<string, any> = {}, token?: string) {
-  const res = await fetch(ANILIST_GQL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`AniList error: ${res.status}`);
-  return res.json();
-}
-
-const STATUS_MAP: Record<string, WatchlistItem["status"]> = {
-  CURRENT:   "watching",
-  PLANNING:  "plan_to_watch",
-  COMPLETED: "completed",
-  DROPPED:   "dropped",
-  PAUSED:    "watching",
-  REPEATING: "watching",
-};
-
-const ANILIST_STATUS_MAP: Record<string, string> = {
-  watching:      "CURRENT",
-  plan_to_watch: "PLANNING",
-  completed:     "COMPLETED",
-  dropped:       "DROPPED",
-};
-
-/* ─── Trakt API helper ───
- * Trakt's API sends no CORS headers, so the browser can't call api.trakt.tv
- * directly (fails with "Failed to fetch"). Requests go through our own
- * /api/trakt/proxy route instead, which relays them server-to-server. */
-const TRAKT_CLIENT_ID = process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID || "";
-
-async function traktRequest(idToken: string | undefined, path: string, opts: { method?: string; token?: string; body?: any } = {}) {
-  const res = await fetch("/api/trakt/proxy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken || ""}`,
-    },
-    body: JSON.stringify({ path, method: opts.method, token: opts.token, body: opts.body }),
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Trakt error (${res.status}): ${errText}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+interface FirebaseAuthApi {
+  auth: Auth;
+  GoogleAuthProvider: typeof GoogleAuthProviderClass;
+  signInWithPopup: typeof signInWithPopupFn;
+  signInWithRedirect: typeof signInWithRedirectFn;
+  signOut: typeof signOutFn;
 }
 
 /* ─── Component ─── */
@@ -267,7 +40,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
-  const [firebaseAuth, setFirebaseAuth] = useState<any>(null);
+  const [firebaseAuth, setFirebaseAuth] = useState<FirebaseAuthApi | null>(null);
 
   /* ─── AniList State ─── */
   const [anilistUser, setAnilistUser] = useState<AniListUser | null>(null);
@@ -280,17 +53,11 @@ export default function Dashboard() {
   const [traktSyncMsg, setTraktSyncMsg] = useState("");
 
   /* ─── Navigation ─── */
-  const [activeTab, setActiveTab] = useState<"expenses" | "subscriptions" | "habits" | "media" | "books" | "goals" | "notes" | "investments">("expenses");
+  const [activeTab, setActiveTab] = useState<"expenses" | "media" | "books" | "notes" | "investments">("expenses");
 
   /* ─── State for New Features ─── */
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isFetchingSubscriptions, setIsFetchingSubscriptions] = useState(false);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [isFetchingHabits, setIsFetchingHabits] = useState(false);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [isFetchingGoals, setIsFetchingGoals] = useState(false);
-  const [note, setNote] = useState<Note>({ content: "", updatedAt: 0 });
-  const [isFetchingNote, setIsFetchingNote] = useState(false);
 
   /* ─── Filters ─── */
   const [timeFilter, setTimeFilter] = useState("all");
@@ -330,14 +97,11 @@ export default function Dashboard() {
   const [isFetchingInvestments, setIsFetchingInvestments] = useState(false);
   const [isAddingInvestment, setIsAddingInvestment] = useState(false);
   const [invName, setInvName] = useState("");
-  const [invSuggestions, setInvSuggestions] = useState<any[]>([]);
-  const [isSearchingInv, setIsSearchingInv] = useState(false);
+  const [invSuggestions, setInvSuggestions] = useState<InvestmentQuote[]>([]);
   const [showInvSuggestions, setShowInvSuggestions] = useState(false);
   const [invCategory, setInvCategory] = useState<InvestmentAsset["category"]>("equity");
   const [invAmount, setInvAmount] = useState("");
   const [invQty, setInvQty] = useState("");
-  const [invBuyPrice, setInvBuyPrice] = useState("");
-  const [invCurrentPrice, setInvCurrentPrice] = useState("");
   const [invNotes, setInvNotes] = useState("");
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
   const [priceUpdateMsg, setPriceUpdateMsg] = useState("");
@@ -426,7 +190,7 @@ export default function Dashboard() {
         // Surfaces errors from the signInWithRedirect fallback below (its
         // result only arrives after the full round-trip back to this page,
         // so it can't be awaited inline where signInWithRedirect is called).
-        getRedirectResult(auth).catch((err: any) => setAuthError(err.message));
+        getRedirectResult(auth).catch((err: any) => setAuthError(friendlyAuthErrorMessage(err)));
 
         unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
           if (fbUser) {
@@ -587,7 +351,6 @@ export default function Dashboard() {
       return;
     }
     const delayDebounce = setTimeout(async () => {
-      setIsSearchingInv(true);
       try {
         const res = await fetch(`/api/portfolio/search?q=${encodeURIComponent(invName)}`, { headers: getHeaders() });
         if (res.ok) {
@@ -596,9 +359,6 @@ export default function Dashboard() {
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setIsSearchingInv(true); // Always set search suggestions active when typing
-        setIsSearchingInv(false);
       }
     }, 250);
 
@@ -761,7 +521,7 @@ export default function Dashboard() {
         return {
           title: media.title?.english || media.title?.romaji || "Unknown",
           type: "anime" as const,
-          status: STATUS_MAP[entry.status] || "plan_to_watch",
+          status: ANILIST_STATUS_MAP[entry.status] || "plan_to_watch",
           progress: entry.progress || 0,
           totalEpisodes: media.episodes || null,
           rating: entry.score || null,
@@ -993,7 +753,7 @@ export default function Dashboard() {
         }
       `, {
         mediaId: item.anilistId,
-        status: ANILIST_STATUS_MAP[mergedStatus] || "CURRENT",
+        status: TO_ANILIST_STATUS_MAP[mergedStatus] || "CURRENT",
         progress: mergedProgress,
         score: mergedRating ? Number(mergedRating) : 0,
       }, anilistUser.token);
@@ -1161,8 +921,6 @@ export default function Dashboard() {
     setInvName("");
     setInvAmount("");
     setInvQty("");
-    setInvBuyPrice("");
-    setInvCurrentPrice("");
     setInvNotes("");
     setIsAddingInvestment(false);
   };
@@ -1269,7 +1027,6 @@ export default function Dashboard() {
 
 
   const fetchNote = async () => {
-    setIsFetchingNote(true);
     try {
       const res = await fetch("/api/notes", { headers: getHeaders() });
       if (res.ok) {
@@ -1277,7 +1034,6 @@ export default function Dashboard() {
         if (data.content) setNoteContent(data.content);
       }
     } catch (err) { console.error(err); }
-    finally { setIsFetchingNote(false); }
   };
 
   const addMediaToWatchlist = async (item: SearchResult) => {
@@ -1364,7 +1120,7 @@ export default function Dashboard() {
                   item.coverImage = `https://image.tmdb.org/t/p/w185${posterPath}`;
                 }
               }
-            } catch (err) {}
+            } catch { /* poster lookup is best-effort */ }
           }
           if (item.type === "show" && !item.coverImage) {
             const queryParam = item.imdbId ? `imdb=${item.imdbId}` : item.tvdbId ? `thetvdb=${item.tvdbId}` : null;
@@ -1375,7 +1131,7 @@ export default function Dashboard() {
                   const showData = await res.json();
                   if (showData.image?.medium) item.coverImage = showData.image.medium;
                 }
-              } catch (err) {}
+              } catch { /* poster lookup is best-effort */ }
             }
           }
           return item;
@@ -1512,29 +1268,6 @@ export default function Dashboard() {
     }
   };
 
-  const getSalaryCycleRange = (salaryDay: number) => {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0-indexed
-    const currentDate = today.getDate();
-
-    let startDate: Date;
-    let endDate: Date;
-
-    if (currentDate >= salaryDay) {
-      startDate = new Date(currentYear, currentMonth, salaryDay);
-      endDate = new Date(currentYear, currentMonth + 1, salaryDay - 1);
-    } else {
-      startDate = new Date(currentYear, currentMonth - 1, salaryDay);
-      endDate = new Date(currentYear, currentMonth, salaryDay - 1);
-    }
-
-    return {
-      startStr: startDate.toISOString().slice(0, 10),
-      endStr: endDate.toISOString().slice(0, 10),
-    };
-  };
-
   /* ─── Derived data ───
    * Search/time filtering happens client-side against the one cached fetch of
    * expenses, instead of re-querying Firestore on every keystroke. */
@@ -1616,7 +1349,6 @@ export default function Dashboard() {
   const watchingCount = watchlist.filter((i) => i.status === "watching").length;
   const planCount     = watchlist.filter((i) => i.status === "plan_to_watch").length;
   const completedCount = watchlist.filter((i) => i.status === "completed").length;
-  const lastCompleted = watchlist.filter((i) => i.status === "completed").sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
   const filteredWatchlist = watchlist
     .filter((i) => {
@@ -1653,26 +1385,20 @@ export default function Dashboard() {
     // Falling back to a full-page redirect sidesteps the popup requirement
     // altogether; onAuthStateChanged + getRedirectResult above pick up the
     // session once the user is redirected back.
-    const POPUP_FALLBACK_CODES = new Set([
-      "auth/popup-blocked",
-      "auth/popup-closed-by-user",
-      "auth/cancelled-popup-request",
-      "auth/operation-not-supported-in-this-environment",
-    ]);
-
     const handleGoogleLogin = async () => {
       if (!firebaseAuth) return;
       try {
         await firebaseAuth.signInWithPopup(firebaseAuth.auth, new firebaseAuth.GoogleAuthProvider());
-      } catch (e: any) {
-        if (POPUP_FALLBACK_CODES.has(e.code)) {
+      } catch (e: unknown) {
+        const code = (e as { code?: string })?.code;
+        if (POPUP_FALLBACK_CODES.has(code || "")) {
           try {
             await firebaseAuth.signInWithRedirect(firebaseAuth.auth, new firebaseAuth.GoogleAuthProvider());
-          } catch (redirectErr: any) {
-            setAuthError(redirectErr.message);
+          } catch (redirectErr: unknown) {
+            setAuthError(friendlyAuthErrorMessage(redirectErr as { code?: string; message?: string }));
           }
         } else {
-          setAuthError(e.message);
+          setAuthError(friendlyAuthErrorMessage(e as { code?: string; message?: string }));
         }
       }
     };
@@ -3029,8 +2755,8 @@ export default function Dashboard() {
                           <div
                             key={suggestion.symbol}
                             onClick={() => {
-                              setInvName(suggestion.symbol);
-                              setInvNotes(suggestion.name);
+                              setInvName(suggestion.symbol || suggestion.name || "");
+                              setInvNotes(suggestion.name || "");
                               const type = suggestion.type;
                               if (type === 'CRYPTOCURRENCY') setInvCategory('crypto');
                               else if (type === 'MUTUALFUND') setInvCategory('mutual_fund');

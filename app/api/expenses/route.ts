@@ -35,11 +35,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Batch payloads: { items: [...] } or a raw array
-    const batchItems = Array.isArray(body)
-      ? body
-      : Array.isArray((body as any)?.items)
-      ? (body as any).items
-      : null;
+    const itemsField = (body as { items?: unknown } | null)?.items;
+    const batchItems = Array.isArray(body) ? body : Array.isArray(itemsField) ? itemsField : null;
 
     if (batchItems) {
       const entries = validateExpenseBatch(batchItems);

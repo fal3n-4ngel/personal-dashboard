@@ -76,7 +76,7 @@ function docName(session: Session, ...segments: string[]): string {
   return `projects/${session.config.projectId}/databases/(default)/documents/${segments.join("/")}`;
 }
 
-async function fsFetch(session: Session, url: string, init?: RequestInit): Promise<any> {
+async function fsFetch<T = unknown>(session: Session, url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -101,7 +101,27 @@ async function fsFetch(session: Session, url: string, init?: RequestInit): Promi
 
 /* ─── Firestore value encoding ─── */
 
-function toValue(v: unknown): any {
+// Mirrors the Firestore REST API's discriminated "Value" wire format.
+type FirestoreValue =
+  | { nullValue: null }
+  | { stringValue: string }
+  | { booleanValue: boolean }
+  | { integerValue: string }
+  | { doubleValue: number }
+  | { arrayValue: { values?: FirestoreValue[] } }
+  | { mapValue: { fields?: Record<string, FirestoreValue> } }
+  | { timestampValue: string };
+
+interface FirestoreDocument {
+  name: string;
+  fields?: Record<string, FirestoreValue>;
+}
+
+interface RunQueryRow {
+  document?: FirestoreDocument;
+}
+
+function toValue(v: unknown): FirestoreValue {
   if (v === null || v === undefined) return { nullValue: null };
   if (typeof v === "string") return { stringValue: v };
   if (typeof v === "boolean") return { booleanValue: v };
@@ -113,16 +133,15 @@ function toValue(v: unknown): any {
   throw new ApiError(400, "Unsupported value type in payload.");
 }
 
-function toFields(obj: Record<string, unknown>): Record<string, any> {
-  const fields: Record<string, any> = {};
+function toFields(obj: Record<string, unknown>): Record<string, FirestoreValue> {
+  const fields: Record<string, FirestoreValue> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) fields[key] = toValue(value);
   }
   return fields;
 }
 
-function fromValue(v: any): unknown {
-  if (v === null || v === undefined) return null;
+function fromValue(v: FirestoreValue): unknown {
   if ("stringValue" in v) return v.stringValue;
   if ("integerValue" in v) return Number(v.integerValue);
   if ("doubleValue" in v) return v.doubleValue;
@@ -134,7 +153,7 @@ function fromValue(v: any): unknown {
   return null;
 }
 
-function fromFields(fields: Record<string, any>): Record<string, unknown> {
+function fromFields(fields: Record<string, FirestoreValue> | undefined): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fields || {})) {
     obj[key] = fromValue(value);
@@ -162,13 +181,13 @@ async function runOwnedQuery(session: Session, collectionId: string): Promise<{ 
     },
   };
 
-  const rows: any[] = await fsFetch(session, `${docsRoot(session)}:runQuery`, {
+  const rows = await fsFetch<RunQueryRow[]>(session, `${docsRoot(session)}:runQuery`, {
     method: "POST",
     body: JSON.stringify(body),
   });
 
   return (rows || [])
-    .filter((row) => row.document)
+    .filter((row): row is Required<RunQueryRow> => !!row.document)
     .map((row) => ({ id: idFromName(row.document.name), data: fromFields(row.document.fields) }));
 }
 
@@ -278,7 +297,7 @@ export async function createExpense(session: Session, entry: ExpenseEntry) {
     createdAt: Date.now(),
   };
 
-  const created = await fsFetch(session, `${docsRoot(session)}/expenses`, {
+  const created = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/expenses`, {
     method: "POST",
     body: JSON.stringify({ fields: toFields(docData) }),
   });
@@ -450,7 +469,7 @@ async function getRawWatchlist(session: Session): Promise<Record<string, Watchli
 
   let items: Record<string, WatchlistItem>;
   try {
-    const snap = await fsFetch(session, `${docsRoot(session)}/watchlists/${session.uid}`);
+    const snap = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/watchlists/${session.uid}`);
     items = (fromFields(snap.fields).items as Record<string, WatchlistItem>) || {};
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
@@ -625,7 +644,7 @@ export async function createSubscription(session: Session, entry: SubscriptionEn
     createdAt: Date.now(),
   };
 
-  const created = await fsFetch(session, `${docsRoot(session)}/subscriptions`, {
+  const created = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/subscriptions`, {
     method: "POST",
     body: JSON.stringify({ fields: toFields(docData) }),
   });
@@ -666,7 +685,7 @@ export async function updateSubscription(session: Session, id: string, updates: 
 // ownership is enforced by the security rules matching the doc id to auth.uid.
 export async function getNote(session: Session): Promise<NoteRecord | null> {
   try {
-    const res = await fsFetch(session, `${docsRoot(session)}/notes/${session.uid}`);
+    const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/notes/${session.uid}`);
     const data = fromFields(res.fields || {});
     return { id: session.uid, content: (data.content as string) || "", updatedAt: (data.updatedAt as number) || 0 };
   } catch (err) {
@@ -708,12 +727,12 @@ export interface PortfolioRecord {
 
 export async function getPortfolio(session: Session): Promise<PortfolioRecord | null> {
   try {
-    const res = await fsFetch(session, `${docsRoot(session)}/portfolios/${session.uid}`);
+    const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/portfolios/${session.uid}`);
     const data = fromFields(res.fields || {});
-    const assetsRaw = Array.isArray(data.assets) ? data.assets : [];
-    
+    const assetsRaw = Array.isArray(data.assets) ? (data.assets as Record<string, unknown>[]) : [];
+
     // Parse assets fields safely
-    const assets: InvestmentAsset[] = assetsRaw.map((a: any) => ({
+    const assets: InvestmentAsset[] = assetsRaw.map((a) => ({
       id: String(a.id || ""),
       name: String(a.name || ""),
       category: (a.category || "equity") as InvestmentAsset["category"],

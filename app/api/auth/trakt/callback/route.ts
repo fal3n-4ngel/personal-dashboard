@@ -49,7 +49,8 @@ export async function GET(req: NextRequest) {
       `&trakt_expires_in=${tokens.expires_in}`;
 
     return NextResponse.redirect(`${origin}/#${hash}`);
-  } catch (error: any) {
-    return NextResponse.redirect(`${origin}/?trakt_error=${encodeURIComponent(error.message)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Trakt sign-in failed.";
+    return NextResponse.redirect(`${origin}/?trakt_error=${encodeURIComponent(message)}`);
   }
 }
