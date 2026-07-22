@@ -200,7 +200,7 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
       </div>
 
       {/* Main 2-Column Section */}
-      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "20px", alignItems: "start" }}>
+      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)", gap: "20px", alignItems: "start" }}>
         {/* Left Column: SEARCH & ADD */}
         <div className="bento-card">
           <span className="label-mono" style={{ marginBottom: "4px", display: "block" }}>SEARCH &amp; ADD</span>
@@ -436,6 +436,53 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Letterboxd Import Modal */}
+      {showLetterboxdModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          backdropFilter: "blur(4px)",
+        }}>
+          <div className="bento-card" style={{ width: "450px", padding: "24px", display: "flex", flexDirection: "column", gap: "16px", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)", backgroundColor: "#fff" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="label-mono" style={{ fontSize: "12px" }}>Import Letterboxd CSV</span>
+              <button onClick={() => setShowLetterboxdModal(false)} style={{ background: "transparent", border: "none", fontSize: "16px", cursor: "pointer", padding: "4px" }}>✕</button>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.4" }}>
+              Paste the contents of your Letterboxd <code>watchlist.csv</code> or <code>watched.csv</code> file below. We will parse it and add the movies to your library automatically.
+            </p>
+            <textarea
+              rows={8}
+              placeholder="Date,Name,Year,Letterboxd URI&#10;2026-07-22,Interstellar,2014,https://boxd.it/...&#10;2026-07-22,The Prestige,2006,https://boxd.it/..."
+              value={letterboxdCsv}
+              onChange={(e) => setLetterboxdCsv(e.target.value)}
+              style={{ width: "100%", fontFamily: "monospace", fontSize: "11px", resize: "vertical", padding: "10px", borderRadius: "6px", border: "1px solid var(--border-subtle)", background: "var(--bg-body)" }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button onClick={() => setShowLetterboxdModal(false)} className="btn-secondary" style={{ padding: "8px 16px", fontSize: "12px", height: "36px" }}>
+                Cancel
+              </button>
+              <button
+                onClick={handleLetterboxdImport}
+                disabled={isImportingLetterboxd || !letterboxdCsv.trim()}
+                className="btn-primary"
+                style={{ padding: "8px 20px", fontSize: "12px", opacity: (isImportingLetterboxd || !letterboxdCsv.trim()) ? 0.5 : 1, cursor: (isImportingLetterboxd || !letterboxdCsv.trim()) ? "not-allowed" : "pointer", height: "36px" }}
+              >
+                {isImportingLetterboxd ? "Importing..." : "Import Movies"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
