@@ -206,7 +206,7 @@ export default function Dashboard() {
 
   async function loadTraktUser(accessToken: string, refreshToken: string, idToken: string | undefined) {
     try {
-      const profile = await traktRequest(idToken, "users/me", { token: accessToken });
+      const profile = await traktRequest(idToken, "users/me?extended=full", { token: accessToken });
       if (profile?.username) {
         setTraktUser({
           username: profile.username,
