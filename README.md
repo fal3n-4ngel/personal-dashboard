@@ -1,4 +1,4 @@
-# 📊 PHub Dashboard
+# PHub Dashboard
 
 > **One dashboard to rule them all.** Replace 5 single-purpose apps with a self-hosted, privacy-first command center for your finances, watchlists, books, subscriptions, and quick notes—all hooked up directly to your favorite AI assistant.
 
@@ -8,7 +8,7 @@
 
 * 💸 **Expense Ledger** — Log transactions, tag categories, configure location-specific currencies, and filter by custom salary pay periods.
 * 📈 **Investment Portfolios** — Monitor equities, crypto, mutual funds, gold, and cash in one place with manual or live updates.
-* 🎬 **Unified Watchlist** — Consolidate movies, TV shows, and anime. Sync bidirectionally with AniList & Trakt, or import Letterboxd CSVs.
+* 🎬 **Unified Watchlist** — Consolidate movies, TV shows, and anime. Sync bidirectionally with AniList & Trakt, import Letterboxd CSVs, and automatically enrich missing cover images with OMDb and TVMaze.
 * 📚 **Book Library** — Search OpenLibrary to manage your reading list and track progress.
 * 🔄 **Subscription Tracker** — Keep tabs on recurring monthly/yearly costs and calculate your true effective monthly spend.
 * 📝 **Scratchpad Notes** — A lightweight, auto-saving space for quick thoughts.
@@ -19,9 +19,10 @@
 ## 💡 Why This Exists
 Well, it’s been a while since I worked on any public projects—mostly coz I rarely get time after work, and even when I do, it’s usually personal APIs or portfolio updates.
 
-I already had a system to track my expenses and movies via my perosnal api, which I enhanced when ChatGPT released Custom GPTs so I could add stuff directly via chat (use ai without paying for api). Instead of putting AI inside my API, I put my API inside AI (sounded cool in my head)
+I already had a system to track my expenses and movies via my perosnal api, which I enhanced when ChatGPT released Custom GPTs so I could add stuff directly via chat (use ai without paying for api). Instead of putting AI inside my API, I put my API inside AI (sounded cool in my head).
 
 Anyway, a friend saw it and wanted it too, so rather than handing over my personal API collection, I decided to build a proper dashboard instead. And here we are!
+
 ---
 
 ## 🛠 Tech Stack
@@ -29,7 +30,7 @@ Anyway, a friend saw it and wanted it too, so rather than handing over my person
 * **Frontend Framework:** [Next.js 16](https://nextjs.org) (App Router, Turbopack) + React 19 + TypeScript
 * **Database & Auth:** [Firebase](https://firebase.google.com) (Google Sign-In + Firestore REST API)
 * **Integrations:**
-* **Media:** AniList (GraphQL), Trakt (REST), TMDb (Posters)
+  * **Media:** AniList (GraphQL), Trakt (REST), OMDb API & TVMaze API (Posters)
 * **Books:** OpenLibrary API
 * **AI Actions:** OpenAPI 3.1 Spec
 
@@ -91,7 +92,7 @@ FIREBASE_CONFIG={"apiKey":"...","authDomain":"...","projectId":"..."}
 
 ```
 
-*(Optional API keys for Trakt, AniList, and TMDb can also be added here. See [`.env.example`](https://www.google.com/search?q=.env.example).)*
+*(Optional API keys for Trakt, AniList, and OMDb API (`NEXT_PUBLIC_IMDB_API_KEY`) can also be added here. See [`.env.example`](file:///.env.example).)*
 
 > [!TIP]
 > **Bring-Your-Own-Config (BYOC) Mode:** You don't have to hardcode server-wide environment variables. Users can supply their credentials per request via custom headers (`X-Firebase-Config`, `X-Trakt-Client-Id`, etc.). See [`lib/credentials.ts`](https://www.google.com/search?q=lib/credentials.ts) for details.
@@ -118,6 +119,17 @@ npm run build && npm run start
 5. Paste `/api/openapi.json` to import the schema, set Authentication to **API Key (Bearer)**, and paste your token.
 
 Now you can track expenses, add to watchlists, and manage your dashboard in conversational text!
+
+---
+
+## 👥 Contributing & Sponsoring
+
+We welcome contributions! Please check out our [CONTRIBUTING.md](file:///CONTRIBUTING.md) guide for details on:
+- Setting up your local environment and running checks (`npm run lint`, `npm run build`).
+- Deploying builds and lint validations with GitHub Actions.
+- Automatic release generation when branches matching `release/v*` are pushed.
+
+If you find this dashboard helpful, consider supporting its development via the GitHub Sponsor button!
 
 ---
 

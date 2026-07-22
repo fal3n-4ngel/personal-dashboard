@@ -931,12 +931,12 @@ export default function Dashboard() {
 
       const newItems: Omit<WatchlistItem, "id">[] = [];
       for (let i = 1; i < lines.length; i++) {
-        let arr: string[] = [];
+        const arr: string[] = [];
         let quote = false;
         let cell = "";
         const str = lines[i];
         for (let c = 0; c < str.length; c++) {
-          let char = str[c];
+          const char = str[c];
           if (char === '"' && str[c + 1] === '"') {
             cell += '"';
             c++;

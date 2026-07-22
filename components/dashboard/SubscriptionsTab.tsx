@@ -47,6 +47,8 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
   deleteSubscription,
   isFetchingSubscriptions,
 }) => {
+  const [now] = React.useState(() => Date.now());
+
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_cubic-bezier(0.16,1,0.3,1)_forwards]">
       {/* Stat row */}
@@ -84,7 +86,7 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
               if (subscriptions.length === 0) return "";
               const next = subscriptions.slice().sort((a, b) => new Date(a.nextBillingDate).getTime() - new Date(b.nextBillingDate).getTime())[0];
               if (!next) return "";
-              const d = Math.ceil((new Date(next.nextBillingDate).getTime() - Date.now()) / 86400000);
+              const d = Math.ceil((new Date(next.nextBillingDate).getTime() - now) / 86400000);
               return d === 0 ? "due today" : `in ${d} day${d === 1 ? "" : "s"}`;
             })()}
           </span>
@@ -129,7 +131,7 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
             )}
             {subscriptions.map((sub) => {
               const nextDate = new Date(sub.nextBillingDate);
-              const daysUntil = Math.ceil((nextDate.getTime() - Date.now()) / 86400000);
+              const daysUntil = Math.ceil((nextDate.getTime() - now) / 86400000);
               const isDueSoon = daysUntil <= 7 && daysUntil >= 0;
               return (
                 <div
