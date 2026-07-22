@@ -213,7 +213,7 @@ function watchlistCacheKey(session: Session): string {
 // re-scan the whole collection on top of the list fetch that just happened.
 async function getRawExpenses(session: Session): Promise<ExpenseRecord[]> {
   const cacheKey = expenseCacheKey(session);
-  const cached = cacheGet<ExpenseRecord[]>(cacheKey);
+  const cached = await cacheGet<ExpenseRecord[]>(cacheKey);
   if (cached) return cached;
 
   const rows = await runOwnedQuery(session, "expenses");
@@ -227,7 +227,7 @@ async function getRawExpenses(session: Session): Promise<ExpenseRecord[]> {
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
   }));
 
-  cacheSet(cacheKey, records, EXPENSE_CACHE_TTL);
+  await cacheSet(cacheKey, records, EXPENSE_CACHE_TTL);
   return records;
 }
 
@@ -302,7 +302,7 @@ export async function createExpense(session: Session, entry: ExpenseEntry) {
     body: JSON.stringify({ fields: toFields(docData) }),
   });
 
-  cacheInvalidate(expenseCacheKey(session));
+  await cacheInvalidate(expenseCacheKey(session));
   return { id: idFromName(created.name) };
 }
 
@@ -363,7 +363,7 @@ export async function updateExpense(session: Session, id: string, entry: Partial
     body: JSON.stringify({ fields: toFields(updateData) }),
   });
 
-  cacheInvalidate(expenseCacheKey(session));
+  await cacheInvalidate(expenseCacheKey(session));
   return { id };
 }
 
@@ -374,7 +374,7 @@ export async function archiveExpense(session: Session, id: string) {
     method: "DELETE",
   });
 
-  cacheInvalidate(expenseCacheKey(session));
+  await cacheInvalidate(expenseCacheKey(session));
   return { id };
 }
 
@@ -464,7 +464,7 @@ async function migrateLegacyWatchlist(session: Session): Promise<Record<string, 
 
 async function getRawWatchlist(session: Session): Promise<Record<string, WatchlistItem>> {
   const cacheKey = watchlistCacheKey(session);
-  const cached = cacheGet<Record<string, WatchlistItem>>(cacheKey);
+  const cached = await cacheGet<Record<string, WatchlistItem>>(cacheKey);
   if (cached) return cached;
 
   let items: Record<string, WatchlistItem>;
@@ -479,7 +479,7 @@ async function getRawWatchlist(session: Session): Promise<Record<string, Watchli
     }
   }
 
-  cacheSet(cacheKey, items, WATCHLIST_CACHE_TTL);
+  await cacheSet(cacheKey, items, WATCHLIST_CACHE_TTL);
   return items;
 }
 
@@ -495,7 +495,7 @@ export async function addWatchlistItem(session: Session, item: Omit<WatchlistIte
   const docData = { ...item, updatedAt: Date.now() };
 
   await writeWatchlistItems(session, { [id]: docData as unknown as Record<string, unknown> }, new Set([id]));
-  cacheInvalidate(watchlistCacheKey(session));
+  await cacheInvalidate(watchlistCacheKey(session));
   return { id };
 }
 
@@ -510,7 +510,7 @@ export async function updateWatchlistItem(
   });
 
   await writeWatchlistItems(session, { [id]: patch });
-  cacheInvalidate(watchlistCacheKey(session));
+  await cacheInvalidate(watchlistCacheKey(session));
   return { id };
 }
 
@@ -618,13 +618,13 @@ export async function bulkSyncWatchlist(
   }
 
   await writeWatchlistItems(session, patches, newIds);
-  cacheInvalidate(watchlistCacheKey(session));
+  await cacheInvalidate(watchlistCacheKey(session));
   return { added, updated, skipped };
 }
 
 export async function deleteWatchlistItem(session: Session, id: string) {
   await writeWatchlistItems(session, { [id]: null });
-  cacheInvalidate(watchlistCacheKey(session));
+  await cacheInvalidate(watchlistCacheKey(session));
   return { id };
 }
 export interface SubscriptionRecord { id: string; name: string; cost: number; billingCycle: "monthly" | "yearly"; nextBillingDate: string; icon: string | null; createdAt: number; }
@@ -638,7 +638,7 @@ function subscriptionCacheKey(session: Session): string {
 
 export async function listSubscriptions(session: Session): Promise<SubscriptionRecord[]> {
   const cacheKey = subscriptionCacheKey(session);
-  const cached = cacheGet<SubscriptionRecord[]>(cacheKey);
+  const cached = await cacheGet<SubscriptionRecord[]>(cacheKey);
   if (cached) return cached;
 
   const rows = await runOwnedQuery(session, "subscriptions");
@@ -654,7 +654,7 @@ export async function listSubscriptions(session: Session): Promise<SubscriptionR
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
 
-  cacheSet(cacheKey, records, SUBSCRIPTION_CACHE_TTL);
+  await cacheSet(cacheKey, records, SUBSCRIPTION_CACHE_TTL);
   return records;
 }
 
@@ -682,7 +682,7 @@ export async function createSubscription(session: Session, entry: SubscriptionEn
     body: JSON.stringify({ fields: toFields(docData) }),
   });
 
-  cacheInvalidate(subscriptionCacheKey(session));
+  await cacheInvalidate(subscriptionCacheKey(session));
   return { id: idFromName(created.name) };
 }
 
@@ -693,7 +693,7 @@ export async function deleteSubscription(session: Session, id: string) {
     method: "DELETE",
   });
 
-  cacheInvalidate(subscriptionCacheKey(session));
+  await cacheInvalidate(subscriptionCacheKey(session));
   return { id };
 }
 
@@ -711,18 +711,28 @@ export async function updateSubscription(session: Session, id: string, updates: 
     body: JSON.stringify({ fields: toFields(docData) }),
   });
 
-  cacheInvalidate(subscriptionCacheKey(session));
+  await cacheInvalidate(subscriptionCacheKey(session));
 }
 
-// Single doc per user (notes/{userId}), mirroring the watchlist doc shape —
-// ownership is enforced by the security rules matching the doc id to auth.uid.
+const NOTE_CACHE_TTL = 30_000;
+function noteCacheKey(session: Session): string { return `note:${session.config.projectId}:${session.uid}`; }
+
 export async function getNote(session: Session): Promise<NoteRecord | null> {
+  const cacheKey = noteCacheKey(session);
+  const cached = await cacheGet<NoteRecord | null>(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
     const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/notes/${session.uid}`);
     const data = fromFields(res.fields || {});
-    return { id: session.uid, content: (data.content as string) || "", updatedAt: (data.updatedAt as number) || 0 };
+    const record = { id: session.uid, content: (data.content as string) || "", updatedAt: (data.updatedAt as number) || 0 };
+    await cacheSet(cacheKey, record, NOTE_CACHE_TTL);
+    return record;
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
+    if (err instanceof ApiError && err.status === 404) {
+      await cacheSet(cacheKey, null, NOTE_CACHE_TTL);
+      return null;
+    }
     throw err;
   }
 }
@@ -737,6 +747,7 @@ export async function updateNote(session: Session, content: string) {
     method: "PATCH",
     body: JSON.stringify({ fields: toFields(docData) }),
   });
+  await cacheInvalidate(noteCacheKey(session));
 }
 
 export interface InvestmentAsset {
@@ -758,7 +769,14 @@ export interface PortfolioRecord {
   updatedAt: number;
 }
 
+const PORTFOLIO_CACHE_TTL = 30_000;
+function portfolioCacheKey(session: Session): string { return `portfolio:${session.config.projectId}:${session.uid}`; }
+
 export async function getPortfolio(session: Session): Promise<PortfolioRecord | null> {
+  const cacheKey = portfolioCacheKey(session);
+  const cached = await cacheGet<PortfolioRecord | null>(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
     const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/portfolios/${session.uid}`);
     const data = fromFields(res.fields || {});
@@ -778,9 +796,14 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
       createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
     }));
 
-    return { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0) };
+    const record = { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0) };
+    await cacheSet(cacheKey, record, PORTFOLIO_CACHE_TTL);
+    return record;
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
+    if (err instanceof ApiError && err.status === 404) {
+      await cacheSet(cacheKey, null, PORTFOLIO_CACHE_TTL);
+      return null;
+    }
     throw err;
   }
 }
@@ -795,4 +818,5 @@ export async function updatePortfolio(session: Session, assets: InvestmentAsset[
     method: "PATCH",
     body: JSON.stringify({ fields: toFields(docData) }),
   });
+  await cacheInvalidate(portfolioCacheKey(session));
 }

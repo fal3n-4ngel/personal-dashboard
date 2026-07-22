@@ -67,7 +67,7 @@ function recordAuthFailure(ip: string) {
 export async function verifyIdToken(config: FirebaseWebConfig, idToken: string): Promise<AuthedUser> {
   const tokenHash = createHash("sha256").update(idToken).digest("hex");
   const cacheKey = `auth:${config.projectId}:${tokenHash}`;
-  const cached = cacheGet<AuthedUser>(cacheKey);
+  const cached = await cacheGet<AuthedUser>(cacheKey);
   if (cached) return cached;
 
   const res = await fetch(
@@ -94,7 +94,7 @@ export async function verifyIdToken(config: FirebaseWebConfig, idToken: string):
     email: account.email || null,
     displayName: account.displayName || null,
   };
-  cacheSet(cacheKey, user, TOKEN_CACHE_TTL);
+  await cacheSet(cacheKey, user, TOKEN_CACHE_TTL);
   return user;
 }
 
@@ -106,7 +106,7 @@ export async function refreshIdToken(
 ): Promise<{ idToken: string; user: AuthedUser }> {
   const tokenHash = createHash("sha256").update(refreshToken).digest("hex");
   const cacheKey = `refresh:${config.projectId}:${tokenHash}`;
-  const cached = cacheGet<{ idToken: string; user: AuthedUser }>(cacheKey);
+  const cached = await cacheGet<{ idToken: string; user: AuthedUser }>(cacheKey);
   if (cached) return cached;
 
   const params = new URLSearchParams();
@@ -141,7 +141,7 @@ export async function refreshIdToken(
   };
 
   const result = { idToken, user };
-  cacheSet(cacheKey, result, 4 * 60 * 1000);
+  await cacheSet(cacheKey, result, 4 * 60 * 1000);
   return result;
 }
 

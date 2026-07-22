@@ -1,29 +1,55 @@
-// Tiny in-process TTL cache for per-user Firestore reads.
-// Lives for the lifetime of the server process — on a long-running Node server
-// (next start / a container) this actually absorbs repeat reads; on cold-start
-// serverless platforms each cold start begins empty, so this is a bonus layer
-// on top of (not a replacement for) keeping the read count itself low.
+import { redis } from "./redis";
+
+// Tiny async TTL cache for per-user Firestore reads.
+// Uses Redis (via Upstash) for serverless persistence across cold starts,
+// gracefully falling back to an in-memory Map for local development.
+
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;
 }
+const localStore = new Map<string, CacheEntry<unknown>>();
 
-const store = new Map<string, CacheEntry<unknown>>();
-
-export function cacheGet<T>(key: string): T | undefined {
-  const entry = store.get(key);
-  if (!entry) return undefined;
-  if (Date.now() > entry.expiresAt) {
-    store.delete(key);
-    return undefined;
+export async function cacheGet<T>(key: string): Promise<T | undefined> {
+  if (redis) {
+    try {
+      const data = await redis.get<T>(key);
+      return data === null ? undefined : data;
+    } catch (err) {
+      console.warn("Redis get error:", err);
+      return undefined;
+    }
+  } else {
+    const entry = localStore.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      localStore.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
   }
-  return entry.value as T;
 }
 
-export function cacheSet<T>(key: string, value: T, ttlMs: number): void {
-  store.set(key, { value, expiresAt: Date.now() + ttlMs });
+export async function cacheSet<T>(key: string, value: T, ttlMs: number): Promise<void> {
+  if (redis) {
+    try {
+      await redis.set(key, value, { px: ttlMs });
+    } catch (err) {
+      console.warn("Redis set error:", err);
+    }
+  } else {
+    localStore.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
 }
 
-export function cacheInvalidate(key: string): void {
-  store.delete(key);
+export async function cacheInvalidate(key: string): Promise<void> {
+  if (redis) {
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("Redis del error:", err);
+    }
+  } else {
+    localStore.delete(key);
+  }
 }
