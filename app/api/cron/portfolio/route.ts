@@ -297,10 +297,12 @@ export async function POST(req: NextRequest) {
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <span class="logo">Dashboard</span>
-            <span class="date-badge">${todayStr}</span>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom: 1px solid #eae8e0; padding-bottom: 20px; margin-bottom: 24px;">
+            <tr>
+              <td align="left"><span style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; letter-spacing: -0.5px; color: #1c1b18;">PHub Dashboard</span></td>
+              <td align="right"><span style="font-size: 11px; color: #7c7a72;">${todayStr}</span></td>
+            </tr>
+          </table>
           <h1 class="title">Daily Portfolio Close</h1>
           <div class="subtitle">Indian Market Close Wrap-Up (5:30 PM IST)</div>
           
@@ -312,16 +314,19 @@ export async function POST(req: NextRequest) {
             </div>
           </div>
 
-          <div class="mini-grid">
-            <div class="mini-card">
-              <div class="stat-label">Invested Capital</div>
-              <div class="mini-val">₹${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-            </div>
-            <div class="mini-card">
-              <div class="stat-label">USD to INR Rate</div>
-              <div class="mini-val">₹${usdToInr.toFixed(2)}</div>
-            </div>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 28px;">
+            <tr>
+              <td width="48%" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; padding: 16px; text-align: center;">
+                <div class="stat-label" style="font-size: 10px; font-weight: 700; color: #7c7a72; text-transform: uppercase; letter-spacing: 0.8px;">Invested Capital</div>
+                <div class="mini-val" style="font-size: 18px; font-weight: 700; color: #1c1b18; margin-top: 4px;">₹${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              </td>
+              <td width="4%"></td>
+              <td width="48%" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; padding: 16px; text-align: center;">
+                <div class="stat-label" style="font-size: 10px; font-weight: 700; color: #7c7a72; text-transform: uppercase; letter-spacing: 0.8px;">USD to INR Rate</div>
+                <div class="mini-val" style="font-size: 18px; font-weight: 700; color: #1c1b18; margin-top: 4px;">₹${usdToInr.toFixed(2)}</div>
+              </td>
+            </tr>
+          </table>
 
           <div class="sec-title">Asset Breakdown</div>
           <table class="asset-table">
@@ -368,7 +373,7 @@ export async function POST(req: NextRequest) {
     `;
 
     // 6. Send email via Resend API
-    const recipient = user.email || "adiad.dev@gmail.com";
+    const recipient = process.env.CRON_RECIPIENT_EMAIL || user.email || "adiadithyakrishnan@gmail.com";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -376,7 +381,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Personal Dashboard <onboarding@resend.dev>",
+        from: process.env.CRON_SENDER_EMAIL || "Personal Dashboard <onboarding@resend.dev>",
         to: [recipient],
         subject: `Daily Portfolio Close: ₹${totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (${overallPnlPercent >= 0 ? "+" : ""}${overallPnlPercent.toFixed(1)}%)`,
         html: emailHtml,

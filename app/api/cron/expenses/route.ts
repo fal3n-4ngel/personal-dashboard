@@ -276,10 +276,12 @@ export async function POST(req: NextRequest) {
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <span class="logo">Dashboard</span>
-            <span class="period-badge">${period}</span>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom: 1px solid #eae8e0; padding-bottom: 20px; margin-bottom: 24px;">
+            <tr>
+              <td align="left"><span style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; letter-spacing: -0.5px; color: #1c1b18;">PHub Dashboard</span></td>
+              <td align="right"><span style="font-size: 10px; font-weight: 700; background-color: #1c1b18; color: #ffffff; padding: 4px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">${period}</span></td>
+            </tr>
+          </table>
           <h1 class="title">${periodTitle}</h1>
           <div class="subtitle">Reporting Period: ${periodRange}</div>
           
@@ -293,10 +295,16 @@ export async function POST(req: NextRequest) {
           <div class="categories-container">
             ${categoryBreakdown.map((cat) => `
               <div class="cat-row">
-                <div class="cat-info">
-                  <span class="cat-name">${cat.name} <span style="font-weight:normal; font-size:11px; color:#7c7a72;">(${cat.percentage.toFixed(1)}%)</span></span>
-                  <span class="cat-amount">₹${cat.amount.toFixed(2)}</span>
-                </div>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 6px;">
+                  <tr>
+                    <td align="left" style="font-size: 12px; font-weight: 600; color: #1c1b18;">
+                      ${cat.name} <span style="font-weight:normal; font-size:11px; color:#7c7a72;">(${cat.percentage.toFixed(1)}%)</span>
+                    </td>
+                    <td align="right" style="font-size: 12px; font-weight: 600; color: #1c1b18;">
+                      ₹${cat.amount.toFixed(2)}
+                    </td>
+                  </tr>
+                </table>
                 <div class="cat-bar-container">
                   <div class="cat-bar" style="width: ${cat.percentage}%"></div>
                 </div>
@@ -337,7 +345,7 @@ export async function POST(req: NextRequest) {
     `;
 
     // 6. Send email via Resend API
-    const recipient = user.email || "adiad.dev@gmail.com";
+    const recipient = process.env.CRON_RECIPIENT_EMAIL || user.email || "adiadithyakrishnan@gmail.com";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -345,7 +353,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Personal Dashboard <onboarding@resend.dev>",
+        from: process.env.CRON_SENDER_EMAIL || "Personal Dashboard <onboarding@resend.dev>",
         to: [recipient],
         subject: `${periodTitle}: ₹${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent`,
         html: emailHtml,

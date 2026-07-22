@@ -180,9 +180,12 @@ export async function POST(req: NextRequest) {
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <span class="logo">Dashboard</span>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom: 1px solid #eae8e0; padding-bottom: 20px; margin-bottom: 24px;">
+            <tr>
+              <td align="left"><span style="font-family: Georgia, serif; font-size: 20px; font-weight: bold; letter-spacing: -0.5px; color: #1c1b18;">PHub Dashboard</span></td>
+              <td align="right"><span style="font-size: 10px; font-weight: 700; background-color: #b45309; color: #ffffff; padding: 4px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px;">Alert</span></td>
+            </tr>
+          </table>
           <h1 class="title">Upcoming Subscription Renewals</h1>
           <p class="subtitle">Heads up! The following subscriptions are renewing in the next 2-3 days. Please review them below.</p>
           
@@ -193,19 +196,27 @@ export async function POST(req: NextRequest) {
               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
               
               return `
-                <div class="sub-item">
-                  <div class="sub-info">
-                    <div class="sub-icon">${sub.icon || "💳"}</div>
-                    <div>
-                      <div class="sub-name">${sub.name}</div>
-                      <div class="sub-days">Renewing in ${diffDays} days</div>
-                    </div>
-                  </div>
-                  <div>
-                    <div class="sub-cost">₹${sub.cost.toFixed(2)}</div>
-                    <div class="sub-date">${sub.billingCycle === "yearly" ? "Yearly" : "Monthly"} • ${sub.nextBillingDate}</div>
-                  </div>
-                </div>
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; margin-bottom: 12px; padding: 16px;">
+                  <tr>
+                    <td align="left" style="vertical-align: middle;">
+                      <table cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="font-size: 20px; width: 32px; height: 32px; background-color: #eae8e0; border-radius: 6px; text-align: center; vertical-align: middle;">
+                            ${sub.icon || "💳"}
+                          </td>
+                          <td style="vertical-align: middle; padding-left: 12px;">
+                            <div style="font-size: 14px; font-weight: 600; color: #1c1b18; line-height: 1.2;">${sub.name}</div>
+                            <div style="font-size: 11px; color: #b45309; background-color: #fef3c7; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block;">Renewing in ${diffDays} days</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td align="right" style="vertical-align: middle;">
+                      <div style="font-size: 15px; font-weight: 700; color: #1c1b18; text-align: right;">₹${sub.cost.toFixed(2)}</div>
+                      <div style="font-size: 11px; color: #7c7a72; margin-top: 4px; text-align: right;">${sub.billingCycle === "yearly" ? "Yearly" : "Monthly"} • ${sub.nextBillingDate}</div>
+                    </td>
+                  </tr>
+                </table>
               `;
             }).join("")}
           </div>
@@ -220,7 +231,7 @@ export async function POST(req: NextRequest) {
     `;
 
     // 5. Send email via Resend API
-    const recipient = user.email || "adiad.dev@gmail.com"; // Fallback to safe email if none
+    const recipient = process.env.CRON_RECIPIENT_EMAIL || user.email || "adiadithyakrishnan@gmail.com"; // Fallback to safe email if none
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -228,7 +239,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Personal Dashboard <onboarding@resend.dev>",
+        from: process.env.CRON_SENDER_EMAIL || "Personal Dashboard <onboarding@resend.dev>",
         to: [recipient],
         subject: `Alert: ${upcomingRenewals.length} Upcoming Subscription Renewals`,
         html: emailHtml,
