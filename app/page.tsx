@@ -1085,17 +1085,20 @@ export default function Dashboard() {
     if (!invName.trim() || !invAmount) return;
     setIsAddingAsset(true);
     try {
+      const newAsset = {
+        name: invName.trim(),
+        category: invCategory,
+        amount: parseFloat(invAmount),
+        investedAmount: parseFloat(invAmount),
+        quantity: invQuantity ? parseFloat(invQuantity) : undefined,
+        buyPrice: invBuyPrice ? parseFloat(invBuyPrice) : undefined,
+        notes: invNotes.trim() || undefined,
+      };
       const res = await fetch("/api/portfolio", {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({
-          name: invName.trim(),
-          category: invCategory,
-          amount: parseFloat(invAmount),
-          investedAmount: parseFloat(invAmount),
-          quantity: invQuantity ? parseFloat(invQuantity) : undefined,
-          buyPrice: invBuyPrice ? parseFloat(invBuyPrice) : undefined,
-          notes: invNotes.trim() || undefined,
+          assets: [...investments, newAsset],
         }),
       });
       if (res.ok) {
@@ -1117,15 +1120,46 @@ export default function Dashboard() {
     triggerConfirm("Delete Asset", "Are you sure you want to delete this asset from your portfolio?", async () => {
       const updatedList = investments.filter((a) => a.id !== id);
       setInvestments(updatedList);
-      await fetch(`/api/portfolio/${id}`, { method: "DELETE", headers: getHeaders() });
+      const res = await fetch("/api/portfolio", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          assets: updatedList,
+        }),
+      });
+      if (res.ok) {
+        fetchInvestments();
+      }
     });
   };
 
-  const updateMarketPrices = async () => {
+const updateMarketPrices = async () => {
     setIsUpdatingPrices(true);
     try {
-      const res = await fetch("/api/portfolio/prices", { headers: getHeaders() });
-      if (res.ok) fetchInvestments();
+      const res = await fetch("/api/portfolio/prices", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ assets: investments, forceRefresh: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const pricedAssets = (data.assets || []).map((a: any) => {
+          // Recompute current value from quantity * live price when possible,
+          // otherwise fall back to the existing amount.
+          const liveValue =
+            a.quantity && a.currentPriceInr
+              ? a.quantity * a.currentPriceInr
+              : a.amount;
+          return { ...a, amount: liveValue };
+        });
+
+        const saveRes = await fetch("/api/portfolio", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ assets: pricedAssets }),
+        });
+        if (saveRes.ok) fetchInvestments();
+      }
     } catch (err) {
       console.error(err);
     } finally {
