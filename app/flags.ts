@@ -11,3 +11,14 @@ export const enableInvestmentPortfolios = flag<boolean>({
   ],
   adapter: vercelAdapter,
 });
+
+export const enableGeminiChatAssitant = flag<boolean>({
+  key: 'enableGeminiChatAssitant',
+  description: 'Flag for the Gemini Live Chat Assistant bubble',
+  defaultValue: false,
+  options: [
+    { value: false, label: 'Off' },
+    { value: true, label: 'On' },
+  ],
+  adapter: vercelAdapter,
+});

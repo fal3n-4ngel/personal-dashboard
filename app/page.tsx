@@ -31,6 +31,7 @@ import { BooksTab } from "@/components/dashboard/BooksTab";
 import { NotesTab } from "@/components/dashboard/NotesTab";
 import { InvestmentsTab } from "@/components/dashboard/InvestmentsTab";
 import { MediaDetailsModal } from "@/components/dashboard/MediaDetailsModal";
+import { GeminiChatBubble } from "@/components/dashboard/GeminiChatBubble";
 
 interface FirebaseAuthModule {
   auth: any;
@@ -129,14 +130,20 @@ export default function Dashboard() {
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
   const [invSuggestions, setInvSuggestions] = useState<InvestmentQuote[]>([]);
   const [showInvestmentsTab, setShowInvestmentsTab] = useState(true);
+  const [enableGeminiChat, setEnableGeminiChat] = useState(false);
 
   // Load Feature Flags
   useEffect(() => {
     fetch("/api/flags")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && typeof data.enableInvestmentPortfolios === "boolean") {
-          setShowInvestmentsTab(data.enableInvestmentPortfolios);
+        if (data) {
+          if (typeof data.enableInvestmentPortfolios === "boolean") {
+            setShowInvestmentsTab(data.enableInvestmentPortfolios);
+          }
+          if (typeof data.enableGeminiChatAssitant === "boolean") {
+            setEnableGeminiChat(data.enableGeminiChatAssitant);
+          }
         }
       })
       .catch((err) => console.error("Failed to load feature flags:", err));
@@ -1608,6 +1615,10 @@ const updateMarketPrices = async () => {
           onClose={() => setSelectedMediaItem(null)}
           user={user}
         />
+      )}
+
+      {enableGeminiChat && (
+        <GeminiChatBubble idToken={user?.idToken} />
       )}
     </div>
   );

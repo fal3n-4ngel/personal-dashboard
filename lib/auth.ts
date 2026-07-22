@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { Credentials, FirebaseWebConfig, getCredentials, parseFirebaseConfig } from "./credentials";
 import { ApiError } from "./errors";
 import { cacheGet, cacheSet } from "./cache";
+import { redis } from "./redis";
 
 export interface AuthedUser {
   uid: string;
@@ -166,16 +167,44 @@ export async function requireUser(req: NextRequest): Promise<Session> {
     throw new ApiError(401, "Missing bearer token.");
   }
 
+async function trackGptMetrics(req: NextRequest, uid: string, email: string | null) {
   try {
-    const user = await verifyIdToken(config, token);
-    return { creds, config, uid: user.uid, idToken: token, user };
+    if (!redis) return;
+    const userAgent = req.headers.get("user-agent") || "";
+    if (userAgent.toLowerCase().includes("chatgpt") || userAgent.toLowerCase().includes("openai")) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const identifier = email || uid;
+      
+      await Promise.all([
+        redis.incr("metrics:gpt:total_calls"),
+        redis.incr(`metrics:gpt:daily_calls:${todayStr}`),
+        redis.sadd("metrics:gpt:users_set", identifier),
+        redis.hset("metrics:gpt:user_last_active", { [identifier]: Date.now().toString() })
+      ]);
+    }
+  } catch (e) {
+    console.error("Failed to track GPT metrics in Redis:", e);
+  }
+}
+
+  let user: AuthedUser;
+  let resolvedIdToken = token;
+
+  try {
+    user = await verifyIdToken(config, token);
   } catch {
     try {
-      const { idToken, user } = await refreshIdToken(config, token);
-      return { creds, config, uid: user.uid, idToken, user };
+      const refreshResult = await refreshIdToken(config, token);
+      user = refreshResult.user;
+      resolvedIdToken = refreshResult.idToken;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) recordAuthFailure(ip);
       throw err;
     }
   }
+
+  // Track ChatGPT requests asynchronously
+  trackGptMetrics(req, user.uid, user.email).catch(() => {});
+
+  return { creds, config, uid: user.uid, idToken: resolvedIdToken, user };
 }

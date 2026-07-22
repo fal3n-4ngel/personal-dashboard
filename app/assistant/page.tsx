@@ -6,11 +6,6 @@ import type { Auth, GoogleAuthProvider as GoogleAuthProviderClass, signInWithPop
 import { SITE_URL } from "@/lib/site";
 import { useOrigin } from "@/hooks/useOrigin";
 
-/* ─── AI Assistant Integration Guide ───
- * Walks through connecting the dashboard API to a Custom Agent (ChatGPT Custom GPT, Gemini Gems, Claude Projects, etc.) via Actions:
- * Import the OpenAPI schema, then authenticate with a Firebase ID token.
- * Requires sign-in so the user can copy a fresh token straight from here. */
-
 interface AgentUser {
   displayName: string | null;
   email: string;
@@ -73,8 +68,6 @@ export default function AssistantIntegrationPage() {
     }
   }
 
-  // Always mint a fresh token (force refresh) so the full ~1h lifetime is
-  // available after pasting it into the Agent's auth settings.
   async function copyToken() {
     if (!authApi?.auth?.currentUser) return;
     setTokenBusy(true);
@@ -150,10 +143,9 @@ Always confirm what you logged in one short line. Never invent ids — fetch the
         </div>
 
         <div>
-          <h1 className="text-[26px] font-bold tracking-[-0.5px]">Connect AI Assistant</h1>
+          <h1 className="text-[26px] font-bold tracking-[-0.5px]">ChatGPT Setup Guide</h1>
           <p className="mt-2 text-sm leading-[1.6] text-text-secondary">
-            Turn this dashboard into a custom AI Agent or Custom GPT action so you can log expenses and manage your
-            watchlist by chatting — &ldquo;spent 450 on lunch&rdquo;, &ldquo;add Dune to my watchlist&rdquo;, done.
+            Connect your dashboard to a Custom GPT on the GPT Store. If you prefer a native chat assistant, it is available as a floating chat bubble in the bottom right corner of the dashboard page!
           </p>
         </div>
 

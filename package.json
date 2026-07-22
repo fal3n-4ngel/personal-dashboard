@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@flags-sdk/vercel": "^1.4.5",
+    "@google/generative-ai": "^0.24.1",
     "@upstash/redis": "^1.38.0",
     "@vercel/flags": "^3.1.1",
     "firebase": "^12.16.0",
