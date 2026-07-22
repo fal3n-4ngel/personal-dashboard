@@ -530,6 +530,9 @@ export default function LandingPage({
           <span className="inline-flex items-center gap-[5px] rounded-full border border-[#e5e3db] bg-white px-3 py-[5px] text-[11.5px] font-medium text-[#6e6c64]">
             🤖 Custom LLM Sync (Gemini/ChatGPT)
           </span>
+          <span className="inline-flex items-center gap-[5px] rounded-full border border-[#e5e3db] bg-white px-3 py-[5px] text-[11.5px] font-medium text-[#6e6c64]">
+            🔒 AES-256 DB Encryption
+          </span>
         </div>
       </section>
 
@@ -1121,6 +1124,9 @@ export default function LandingPage({
               </li>
               <li className="flex items-start gap-2 text-[12.5px] leading-[1.4] text-[#1c1b18]">
                 <span className={FI_YES}>✓</span> Full env control
+              </li>
+              <li className="flex items-start gap-2 text-[12.5px] leading-[1.4] text-[#1c1b18]">
+                <span className={FI_YES}>✓</span> AES-256 GCM DB Encryption
               </li>
             </ul>
             <a

@@ -43,6 +43,7 @@ Anyway, a friend saw it and wanted it too, so rather than handing over my person
 Your financial and personal data shouldn't be handled loosely. PHub Dashboard enforces security at the database boundary:
 
 * **No Master Server Credentials:** The Next.js backend does not hold an admin key. Every database call is routed through the [Firestore REST API](https://firebase.google.com/docs/firestore/use-rest-api) authenticated directly with the user’s personal Firebase ID token.
+* **Database Encryption (AES-256-GCM):** Sensitive financial data fields (titles, categories, spent amounts, and notes) are encrypted on-the-fly using AES-256-GCM symmetric encryption before hitting Google Firestore, keeping your records protected at rest.
 * **Enforced Database Rules:** Ownership checks in [`firestore.rules`](https://www.google.com/search?q=firestore.rules) guarantee users can only view or modify their own data.
 * **Hardened API Routes:** All input data is strictly validated before hitting the database, and upstream external proxy routes (like Trakt) are strictly allowlisted to prevent SSRF vulnerabilities.
 
@@ -89,7 +90,7 @@ Fill in `FIREBASE_CONFIG` as a single-line JSON string in your `.env.local`:
 
 ```env
 FIREBASE_CONFIG={"apiKey":"...","authDomain":"...","projectId":"..."}
-
+ENCRYPTION_KEY="your-custom-super-secret-key-phrase"
 ```
 
 *(Optional API keys for Trakt, AniList, and OMDb API (`NEXT_PUBLIC_IMDB_API_KEY`) can also be added here. See [`.env.example`](file:///.env.example).)*

@@ -6,8 +6,8 @@ const IV_LENGTH = 12; // 96 bits for GCM
 const AUTH_TAG_LENGTH = 16; // 128 bits for GCM
 
 // Get or derive a 32-byte encryption key
-function getEncryptionKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY;
+function getEncryptionKey(useFallbackOnly: boolean = false): Buffer {
+  const secret = useFallbackOnly ? null : process.env.ENCRYPTION_KEY;
   if (secret) {
     // If key is provided, hash it to ensure exactly 32 bytes
     return crypto.createHash("sha256").update(secret).digest();
@@ -42,14 +42,14 @@ export function encrypt(text: string): string {
 /**
  * Decrypts a serialized "iv:authTag:ciphertext" string back to plain text
  */
-export function decrypt(encryptedText: string): string {
+export function decrypt(encryptedText: string, useFallbackOnly: boolean = false): string {
   if (!encryptedText || !encryptedText.includes(":")) {
     // Return original if it doesn't look like our encrypted format (e.g. migration safety for old records)
     return encryptedText;
   }
 
   try {
-    const key = getEncryptionKey();
+    const key = getEncryptionKey(useFallbackOnly);
     const [ivHex, authTagHex, ciphertextHex] = encryptedText.split(":");
     
     if (!ivHex || !authTagHex || !ciphertextHex) {
@@ -66,7 +66,11 @@ export function decrypt(encryptedText: string): string {
     
     return decrypted;
   } catch (err) {
-    // If decryption fails (e.g. key changed or unencrypted old data), return original
+    if (!useFallbackOnly && process.env.ENCRYPTION_KEY) {
+      // If decryption failed using the main key, attempt to decrypt with the fallback key
+      return decrypt(encryptedText, true);
+    }
+    // If decryption fails, return original
     console.warn("Decryption failed, returning raw string:", err);
     return encryptedText;
   }
