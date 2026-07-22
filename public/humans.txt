@@ -1,0 +1,39 @@
+_______________________________________________________________________________
+
+DESIGNER | デザイナー
+
+Adithya Krishnan
+a Software Engineer crafting Digital Experiences.
+
+twitter.com/fal3n-4ngel
+github.com/fal3n-4ngel
+
+_______________________________________________________________________________
+
+TECHNOLOGY | テクノロジー
+
+React
+Next.js
+Tailwind CSS
+Firebase
+
+_______________________________________________________________________________
+
+FONTS | フォント
+
+Plus Jakarta Sans
+Playfair Display
+
+_______________________________________________________________________________
+
+GRAPHIC ASSETS | グラフィック素材
+
+Icons: lucide-react
+Tools: Figma
+
+_______________________________________________________________________________
+
+LICENSE | ライセンス
+
+Licensed under the MIT License
+_______________________________________________________________________________

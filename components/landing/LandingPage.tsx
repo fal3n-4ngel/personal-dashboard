@@ -1323,7 +1323,7 @@ export default function LandingPage({
                 rel="noopener noreferrer"
                 className="text-[#9c9a92] no-underline hover:text-[#1c1b18]"
               >
-                @FAL3N-4NGEL
+                @fal3n-4ngel
               </a>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.6px] text-[#9c9a92] uppercase">

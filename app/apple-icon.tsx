@@ -11,18 +11,21 @@ export default function AppleIcon() {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexWrap: "wrap",
-          alignContent: "center",
+          flexDirection: "column",
+          alignItems: "center",
           justifyContent: "center",
           gap: "10px",
           backgroundColor: "#1c1b18",
-          padding: "36px",
         }}
       >
-        <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff" }} />
-        <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.55 }} />
-        <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.55 }} />
-        <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.85 }} />
+        <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", border: "none" }} />
+          <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.55, border: "none" }} />
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.55, border: "none" }} />
+          <div style={{ display: "flex", width: "56px", height: "56px", borderRadius: "12px", backgroundColor: "#ffffff", opacity: 0.85, border: "none" }} />
+        </div>
       </div>
     ),
     { ...size }

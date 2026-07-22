@@ -11,18 +11,21 @@ export default function Icon() {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexWrap: "wrap",
-          alignContent: "center",
+          flexDirection: "column",
+          alignItems: "center",
           justifyContent: "center",
           gap: "2px",
           backgroundColor: "#f4f3ec",
-          padding: "3px",
         }}
       >
-        <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18" }} />
-        <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.55 }} />
-        <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.55 }} />
-        <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.85 }} />
+        <div style={{ display: "flex", gap: "2px" }}>
+          <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", border: "none" }} />
+          <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.55, border: "none" }} />
+        </div>
+        <div style={{ display: "flex", gap: "2px" }}>
+          <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.55, border: "none" }} />
+          <div style={{ display: "flex", width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "#1c1b18", opacity: 0.85, border: "none" }} />
+        </div>
       </div>
     ),
     { ...size }

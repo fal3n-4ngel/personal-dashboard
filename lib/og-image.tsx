@@ -17,11 +17,25 @@ export function SocialCard() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", width: "58px", height: "58px", gap: "8px" }}>
-          <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18" }} />
-          <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.55 }} />
-          <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.55 }} />
-          <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.85 }} />
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "58px",
+            height: "58px",
+            gap: "8px",
+          }}
+        >
+          <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", border: "none" }} />
+            <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.55, border: "none" }} />
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.55, border: "none" }} />
+            <div style={{ display: "flex", width: "25px", height: "25px", borderRadius: "6px", backgroundColor: "#1c1b18", opacity: 0.85, border: "none" }} />
+          </div>
         </div>
         <div style={{ display: "flex", fontSize: "32px", fontWeight: 700, color: "#1c1b18", letterSpacing: "-1px" }}>
           PHub Dashboard
