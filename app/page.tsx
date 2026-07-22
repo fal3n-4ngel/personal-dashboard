@@ -30,6 +30,7 @@ import { WatchlistTab } from "@/components/dashboard/WatchlistTab";
 import { BooksTab } from "@/components/dashboard/BooksTab";
 import { NotesTab } from "@/components/dashboard/NotesTab";
 import { InvestmentsTab } from "@/components/dashboard/InvestmentsTab";
+import { MediaDetailsModal } from "@/components/dashboard/MediaDetailsModal";
 
 interface FirebaseAuthModule {
   auth: any;
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string>("expenses");
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [selectedMediaItem, setSelectedMediaItem] = useState<WatchlistItem | null>(null);
   const [firebaseAuth, setFirebaseAuth] = useState<FirebaseAuthModule | null>(null);
 
   // Integrations
@@ -1477,6 +1479,7 @@ const updateMarketPrices = async () => {
             isSyncingTrakt={isSyncingTrakt}
             enrichMissingPosters={enrichMissingPosters}
             isEnrichingPosters={isEnrichingPosters}
+            onItemClick={setSelectedMediaItem}
           />
         )}
 
@@ -1497,6 +1500,7 @@ const updateMarketPrices = async () => {
             isFetchingWatchlist={isFetchingWatchlist}
             enrichMissingBookCovers={enrichMissingBookCovers}
             isEnrichingBookCovers={isEnrichingBookCovers}
+            onItemClick={setSelectedMediaItem}
           />
         )}
 
@@ -1584,6 +1588,14 @@ const updateMarketPrices = async () => {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedMediaItem && (
+        <MediaDetailsModal
+          item={selectedMediaItem}
+          onClose={() => setSelectedMediaItem(null)}
+          user={user}
+        />
       )}
     </div>
   );

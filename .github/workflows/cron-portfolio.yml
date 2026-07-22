@@ -1,0 +1,24 @@
+name: Daily Portfolio Close Cron
+
+on:
+  schedule:
+    # Runs at 12:00 UTC (5:30 PM IST) Monday to Friday
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  trigger-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portfolio Close Endpoint
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then
+            echo "Error: APP_URL secret is not set."
+            exit 1
+          fi
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Error: CRON_SECRET secret is not set."
+            exit 1
+          fi
+          curl -fail -X POST "${{ secrets.APP_URL }}/api/cron/portfolio" \
+               -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

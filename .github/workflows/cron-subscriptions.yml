@@ -1,0 +1,24 @@
+name: Daily Subscription Alert Cron
+
+on:
+  schedule:
+    # Runs at 03:00 UTC (8:30 AM IST) every day
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  trigger-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Subscription Alerts Endpoint
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then
+            echo "Error: APP_URL secret is not set."
+            exit 1
+          fi
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Error: CRON_SECRET secret is not set."
+            exit 1
+          fi
+          curl -fail -X POST "${{ secrets.APP_URL }}/api/cron/subscriptions" \
+               -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

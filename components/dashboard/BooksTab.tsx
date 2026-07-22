@@ -17,6 +17,7 @@ interface BooksTabProps {
   isFetchingWatchlist: boolean;
   enrichMissingBookCovers?: () => void;
   isEnrichingBookCovers?: boolean;
+  onItemClick: (item: WatchlistItem) => void;
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle relative overflow-hidden transition-all duration-200 hover:shadow-hover hover:-translate-y-0.5";
@@ -57,6 +58,7 @@ export const BooksTab: React.FC<BooksTabProps> = ({
   isFetchingWatchlist,
   enrichMissingBookCovers,
   isEnrichingBookCovers = false,
+  onItemClick,
 }) => {
   const books = watchlist.filter((item) => item.type === "book");
 
@@ -196,7 +198,10 @@ export const BooksTab: React.FC<BooksTabProps> = ({
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
           {filteredBooks.map((item) => (
             <div key={item.id} className="group flex flex-col gap-3 rounded-xl border border-border-subtle bg-bg-card p-3 shadow-subtle hover:shadow-[0_8px_30px_rgba(28,27,24,0.04)] transition-all duration-300 hover:-translate-y-1">
-              <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg shadow-sm transition-all duration-300 group-hover:shadow-md">
+              <div 
+                onClick={() => onItemClick(item)}
+                className="relative aspect-[2/3] w-full overflow-hidden rounded-lg shadow-sm transition-all duration-300 group-hover:shadow-md cursor-pointer"
+              >
                 {item.coverImage ? (
                   <>
                     <img
@@ -227,7 +232,11 @@ export const BooksTab: React.FC<BooksTabProps> = ({
                 </button>
               </div>
               <div className="flex flex-col flex-1 justify-between gap-2.5">
-                <p className="line-clamp-2 min-h-[36px] font-serif text-[13px] font-bold tracking-tight text-text-primary leading-tight group-hover:text-text-primary/90 transition-colors" title={item.title}>
+                <p 
+                  onClick={() => onItemClick(item)}
+                  className="cursor-pointer line-clamp-2 min-h-[36px] font-serif text-[13px] font-bold tracking-tight text-text-primary leading-tight group-hover:text-text-primary/90 transition-colors" 
+                  title={item.title}
+                >
                   {item.title}
                 </p>
                 <div className="relative w-full mt-auto">

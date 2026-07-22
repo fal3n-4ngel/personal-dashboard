@@ -34,6 +34,7 @@ interface WatchlistTabProps {
   isSyncingTrakt?: boolean;
   enrichMissingPosters?: () => void;
   isEnrichingPosters?: boolean;
+  onItemClick: (item: WatchlistItem) => void;
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle";
@@ -87,6 +88,7 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   isSyncingTrakt,
   enrichMissingPosters,
   isEnrichingPosters = false,
+  onItemClick,
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed">("all");
   const [activeCategoryTab, setActiveCategoryTab] = React.useState<"all_media" | "anime">("all_media");
@@ -373,8 +375,11 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
                 key={item.id}
                 className="flex items-center justify-between gap-3.5 rounded-lg border border-border-subtle bg-bg-card px-3.5 py-3 transition-[transform,box-shadow] duration-150 max-md:flex-col max-md:items-stretch"
               >
-                {/* Poster & Info */}
-                <div className="flex min-w-0 flex-1 items-center gap-3.5 max-md:w-full">
+                {/* Poster & Info (Clickable for Detail Popup) */}
+                <div 
+                  onClick={() => onItemClick(item)} 
+                  className="flex min-w-0 flex-1 items-center gap-3.5 max-md:w-full cursor-pointer hover:opacity-85"
+                >
                   {item.coverImage ? (
                     <img src={item.coverImage} alt={item.title} className="h-14 w-10 shrink-0 rounded object-cover shadow-[0_2px_6px_rgba(0,0,0,0.05)]" />
                   ) : (

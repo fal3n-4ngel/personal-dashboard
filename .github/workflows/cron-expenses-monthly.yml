@@ -1,0 +1,24 @@
+name: Monthly Expense Summary Cron
+
+on:
+  schedule:
+    # Runs at 04:30 UTC (10:00 AM IST) on the 1st of every month
+    - cron: '30 4 1 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  trigger-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Monthly Expense Summary Endpoint
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then
+            echo "Error: APP_URL secret is not set."
+            exit 1
+          fi
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Error: CRON_SECRET secret is not set."
+            exit 1
+          fi
+          curl -fail -X POST "${{ secrets.APP_URL }}/api/cron/expenses?period=monthly" \
+               -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
