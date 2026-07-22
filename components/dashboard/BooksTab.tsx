@@ -1,5 +1,6 @@
 import React from "react";
 import { WatchlistItem, SearchResult } from "@/types";
+import { Search, Trash2 } from "lucide-react";
 
 interface BooksTabProps {
   watchlist: WatchlistItem[];
@@ -101,9 +102,7 @@ export const BooksTab: React.FC<BooksTabProps> = ({
         <form onSubmit={searchBooks} className="flex gap-3">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-3 flex items-center text-text-muted pointer-events-none">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search className="h-4 w-4" strokeWidth={2.5} />
             </span>
             <input
               type="text"
@@ -201,12 +200,10 @@ export const BooksTab: React.FC<BooksTabProps> = ({
                     e.stopPropagation();
                     deleteWatchItem(item.id);
                   }}
-                  className="absolute top-2 right-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border-subtle bg-white/95 text-text-muted shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-[#fdf2f2] hover:text-[#b3666b] hover:border-[#fde2e2] active:scale-95"
+                  className="absolute top-2 right-2 z-10 cursor-pointer items-center justify-center rounded-md border border-border-subtle bg-white/95 text-text-muted shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-[#fdf2f2] hover:text-[#b3666b] hover:border-[#fde2e2] active:scale-95"
                   title="Remove book"
                 >
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <Trash2 className="h-3 w-3 " strokeWidth={2.5} />
                 </button>
               </div>
               <div className="flex flex-col flex-1 justify-between gap-2.5">

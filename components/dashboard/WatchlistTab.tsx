@@ -159,61 +159,65 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
       {/* Integration Banners */}
       <div className="flex flex-col gap-3">
         {/* AniList Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4`}>
+        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3b82f6] text-sm font-bold text-white">AL</div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-sm font-bold text-white">AL</div>
             <div>
-              <p className="text-sm font-semibold">Connect AniList</p>
+              <p className="text-sm font-semibold text-text-primary">Connect AniList</p>
               <p className="text-[11px] text-text-muted">Sync your anime and manga watch progress automatically.</p>
             </div>
           </div>
           {anilistUser ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 max-md:w-full">
               {syncAnilist && (
-                <button onClick={syncAnilist} disabled={isSyncingAnilist} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs`}>
+                <button onClick={syncAnilist} disabled={isSyncingAnilist} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs max-md:flex-1`}>
                   {isSyncingAnilist ? "Syncing..." : "Sync Now"}
                 </button>
               )}
-              <button onClick={disconnectAnilist} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs`}>Disconnect ({anilistUser.name})</button>
+              <button onClick={disconnectAnilist} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs max-md:flex-1 truncate`} title={`Disconnect (${anilistUser.name})`}>
+                Disconnect ({anilistUser.name})
+              </button>
             </div>
           ) : (
-            <button onClick={connectAnilist} className={`${BTN_PRIMARY} h-9 px-5 text-xs`}>Connect</button>
+            <button onClick={connectAnilist} className={`${BTN_PRIMARY} h-9 px-5 text-xs max-md:w-full`}>Connect</button>
           )}
         </div>
 
         {/* Trakt Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4`}>
+        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ed1c24] text-xs font-bold text-white">TR</div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ed1c24] text-xs font-bold text-white">TR</div>
             <div>
-              <p className="text-sm font-semibold">Connect Trakt</p>
+              <p className="text-sm font-semibold text-text-primary">Connect Trakt</p>
               <p className="text-[11px] text-text-muted">Sync your movies and TV shows watch progress automatically.</p>
             </div>
           </div>
           {traktUser ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 max-md:w-full">
               {syncTrakt && (
-                <button onClick={syncTrakt} disabled={isSyncingTrakt} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs`}>
+                <button onClick={syncTrakt} disabled={isSyncingTrakt} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs max-md:flex-1`}>
                   {isSyncingTrakt ? "Syncing..." : "Sync Now"}
                 </button>
               )}
-              <button onClick={disconnectTrakt} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs`}>Disconnect ({traktUser.name || traktUser.username})</button>
+              <button onClick={disconnectTrakt} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs max-md:flex-1 truncate`} title={`Disconnect (${traktUser.name || traktUser.username})`}>
+                Disconnect ({traktUser.name || traktUser.username})
+              </button>
             </div>
           ) : (
-            <button onClick={connectTrakt} className={`${BTN_PRIMARY} h-9 px-5 text-xs`}>Connect</button>
+            <button onClick={connectTrakt} className={`${BTN_PRIMARY} h-9 px-5 text-xs max-md:w-full`}>Connect</button>
           )}
         </div>
 
         {/* Letterboxd Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4`}>
+        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00e054] text-sm font-bold text-white">•••</div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00e054] text-sm font-bold text-white">•••</div>
             <div>
-              <p className="text-sm font-semibold">Import Letterboxd</p>
+              <p className="text-sm font-semibold text-text-primary">Import Letterboxd</p>
               <p className="text-[11px] text-text-muted">Upload your Letterboxd CSV (watchlist or watched) to import your movies.</p>
             </div>
           </div>
-          <button onClick={() => setShowLetterboxdModal(true)} className="h-9 cursor-pointer rounded-md border-none bg-[#00e054] px-[18px] text-xs font-semibold text-white">Upload CSV</button>
+          <button onClick={() => setShowLetterboxdModal(true)} className="h-9 cursor-pointer rounded-md border-none bg-[#00e054] px-[18px] text-xs font-semibold text-white max-md:w-full">Upload CSV</button>
         </div>
       </div>
 
