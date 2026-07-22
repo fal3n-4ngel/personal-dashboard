@@ -127,7 +127,7 @@ export const BooksTab: React.FC<BooksTabProps> = ({
                   {res.coverImage ? (
                     <>
                       <img src={res.coverImage} alt={res.title} className="h-full w-full object-cover" />
-                      <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-r from-black/25 via-black/10 to-transparent pointer-events-none" />
+                      <div className="absolute inset-y-0 left-0 w-1.5 bg-linear-to-r from-black/25 via-black/10 to-transparent pointer-events-none" />
                     </>
                   ) : (
                     <span className="text-lg">📚</span>
@@ -156,14 +156,16 @@ export const BooksTab: React.FC<BooksTabProps> = ({
 
           {/* Filter Pills */}
           <div className="flex gap-1 rounded-lg bg-bg-secondary p-[3px]">
-            {[
-              { id: "reading", label: "📖 Reading" },
-              { id: "to_read", label: "⏳ To Read" },
-              { id: "completed", label: "✅ Done" },
-            ].map((f) => (
+            {(
+              [
+                { id: "reading", label: "📖 Reading" },
+                { id: "to_read", label: "⏳ To Read" },
+                { id: "completed", label: "✅ Done" },
+              ] as const
+            ).map((f) => (
               <button
                 key={f.id}
-                onClick={() => setBookFilter(bookFilter === f.id ? "all" : (f.id as any))}
+                onClick={() => setBookFilter(bookFilter === f.id ? "all" : f.id)}
                 className={pillClass(f.id, bookFilter === f.id)}
               >
                 {f.label}
@@ -185,9 +187,9 @@ export const BooksTab: React.FC<BooksTabProps> = ({
                       className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
                     />
                     {/* 3D Book spine shadow overlay */}
-                    <div className="absolute inset-y-0 left-0 w-2.5 bg-gradient-to-r from-black/25 via-black/10 to-transparent pointer-events-none" />
+                    <div className="absolute inset-y-0 left-0 w-2.5 bg-linear-to-r from-black/25 via-black/10 to-transparent pointer-events-none" />
                     {/* Subtle gloss overlay to simulate paper book cover sheen */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                    <div className="absolute inset-0 bg-linear-to-tr from-white/0 via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                   </>
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-bg-secondary text-4xl shadow-[0_4px_12px_rgba(0,0,0,0.1)]">

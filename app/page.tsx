@@ -94,6 +94,7 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchingMedia, setIsSearchingMedia] = useState(false);
   const [watchlistFilter, setWatchlistFilter] = useState<"all" | "anime" | "movie" | "show">("all");
+  const [isEnrichingPosters, setIsEnrichingPosters] = useState(false);
 
   // Letterboxd CSV Import Modal
   const [showLetterboxdModal, setShowLetterboxdModal] = useState(false);
@@ -205,7 +206,7 @@ export default function Dashboard() {
 
   async function loadTraktUser(accessToken: string, refreshToken: string, idToken: string | undefined) {
     try {
-      const profile = await traktRequest(idToken, "users/me", { token: accessToken });
+      const profile = await traktRequest(idToken, "users/me?extended=full", { token: accessToken });
       if (profile?.username) {
         setTraktUser({
           username: profile.username,
@@ -321,6 +322,21 @@ export default function Dashboard() {
     }
   };
 
+  const fetchOMDbPoster = async (imdbId: string | null | undefined): Promise<string | null> => {
+    const apiKey = process.env.NEXT_PUBLIC_IMDB_API_KEY;
+    if (!imdbId || !apiKey) return null;
+    try {
+      const res = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${apiKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.Poster && data.Poster !== "N/A" ? data.Poster : null;
+      }
+    } catch (err) {
+      console.error("OMDb poster error:", err);
+    }
+    return null;
+  };
+
   const syncTrakt = async () => {
     if (!traktUser?.accessToken) {
       connectTrakt();
@@ -337,6 +353,17 @@ export default function Dashboard() {
       if (Array.isArray(movies)) {
         for (const item of movies) {
           if (!item?.movie) continue;
+          const existing = watchlist.find(
+            (w) =>
+              (w.traktId && w.traktId === item.movie.ids?.trakt) ||
+              (w.title.toLowerCase().trim() === item.movie.title.toLowerCase().trim() && w.type === "movie")
+          );
+
+          let coverImage = existing?.coverImage || null;
+          if (!coverImage && item.movie.ids?.imdb) {
+            coverImage = await fetchOMDbPoster(item.movie.ids.imdb);
+          }
+
           entries.push({
             title: item.movie.title,
             type: "movie",
@@ -344,7 +371,7 @@ export default function Dashboard() {
             progress: 1,
             totalEpisodes: 1,
             rating: item.rating ? Number(item.rating) : null,
-            coverImage: null,
+            coverImage,
             year: item.movie.year || null,
             traktId: item.movie.ids?.trakt,
           });
@@ -379,6 +406,23 @@ export default function Dashboard() {
             status = "completed";
           }
 
+          let coverImage = existing?.coverImage || null;
+          if (!coverImage && item.show.ids?.imdb) {
+            coverImage = await fetchOMDbPoster(item.show.ids.imdb);
+          }
+          // TVMaze fallback for TV shows
+          if (!coverImage && item.show.ids?.imdb) {
+            try {
+              const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${item.show.ids.imdb}`);
+              if (tvmazeRes.ok) {
+                const tvmazeData = await tvmazeRes.json();
+                coverImage = tvmazeData.image?.medium || null;
+              }
+            } catch (err) {
+              console.error("TVMaze fallback error:", err);
+            }
+          }
+
           entries.push({
             title: item.show.title,
             type: "show",
@@ -386,7 +430,7 @@ export default function Dashboard() {
             progress,
             totalEpisodes,
             rating: item.rating ? Number(item.rating) : null,
-            coverImage: existing?.coverImage || null,
+            coverImage,
             year: item.show.year || null,
             traktId: item.show.ids?.trakt,
           });
@@ -415,6 +459,98 @@ export default function Dashboard() {
     } finally {
       setIsSyncingTrakt(false);
     }
+  };
+
+  const enrichMissingPosters = async () => {
+    const missing = watchlist.filter(
+      (w) => !w.coverImage && (w.type === "movie" || w.type === "show")
+    );
+    if (missing.length === 0) {
+      triggerAlert("All Good", "All your movies and shows already have cover images!", "success");
+      return;
+    }
+
+    triggerConfirm(
+      "Fetch Missing Posters",
+      `Found ${missing.length} items with missing cover art. Fetch them now from OMDb/TVMaze?`,
+      async () => {
+        setIsEnrichingPosters(true);
+        let successCount = 0;
+        try {
+          const apiKey = process.env.NEXT_PUBLIC_IMDB_API_KEY;
+          for (const item of missing) {
+            let imdbId = null;
+            
+            // 1. Try to resolve IMDb ID from Trakt if available
+            if (item.traktId) {
+              try {
+                const details = await traktRequest(user?.idToken, `${item.type}s/${item.traktId}`);
+                imdbId = details?.ids?.imdb || null;
+              } catch (e) {
+                console.error("Trakt details fetch error:", e);
+              }
+            }
+
+            // 2. Fetch from OMDb
+            let coverImage = null;
+            if (apiKey) {
+              try {
+                const searchUrl = imdbId 
+                  ? `https://www.omdbapi.com/?i=${imdbId}&apikey=${apiKey}`
+                  : `https://www.omdbapi.com/?t=${encodeURIComponent(item.title)}&y=${item.year || ""}&apikey=${apiKey}`;
+                const omdbRes = await fetch(searchUrl);
+                if (omdbRes.ok) {
+                  const omdbData = await omdbRes.json();
+                  coverImage = omdbData.Poster && omdbData.Poster !== "N/A" ? omdbData.Poster : null;
+                }
+              } catch (e) {
+                console.error("OMDb search error:", e);
+              }
+            }
+
+            // 3. Fallback to TVMaze for TV shows
+            if (!coverImage && item.type === "show") {
+              try {
+                const searchUrl = imdbId
+                  ? `https://api.tvmaze.com/lookup/shows?imdb=${imdbId}`
+                  : `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(item.title)}`;
+                const tvmazeRes = await fetch(searchUrl);
+                if (tvmazeRes.ok) {
+                  const tvmazeData = await tvmazeRes.json();
+                  coverImage = tvmazeData.image?.medium || null;
+                }
+              } catch (e) {
+                console.error("TVMaze fallback error:", e);
+              }
+            }
+
+            // 4. Update the item in Firestore if a cover was found
+            if (coverImage) {
+              const res = await fetch(`/api/watchlist/${item.id}`, {
+                method: "PATCH",
+                headers: getHeaders(),
+                body: JSON.stringify({ coverImage }),
+              });
+              if (res.ok) {
+                successCount++;
+              }
+            }
+          }
+
+          if (successCount > 0) {
+            await fetchWatchlist();
+            triggerAlert("Enrichment Complete", `Successfully updated ${successCount} items with cover art!`, "success");
+          } else {
+            triggerAlert("Enrichment Complete", "Could not find any posters for the missing items.", "info");
+          }
+        } catch (err: any) {
+          console.error("Enrichment error:", err);
+          triggerAlert("Enrichment Error", err.message || "Failed to enrich posters.", "danger");
+        } finally {
+          setIsEnrichingPosters(false);
+        }
+      }
+    );
   };
 
   /* ─── Handle OAuth Tokens & Firebase Auth ─── */
@@ -719,19 +855,37 @@ export default function Dashboard() {
       } else {
         const data = await traktRequest(user?.idToken, `search/${mediaType}?query=${encodeURIComponent(mediaQuery)}&limit=8`);
         if (Array.isArray(data)) {
-          setSearchResults(
-            data.map((item: any) => {
+          const enrichedResults = await Promise.all(
+            data.map(async (item: any) => {
               const m = item.movie || item.show;
+              const imdbId = m.ids?.imdb;
+              let coverImage = null;
+              if (imdbId) {
+                coverImage = await fetchOMDbPoster(imdbId);
+              }
+              // TVMaze fallback for shows
+              if (!coverImage && item.type === "show" && imdbId) {
+                try {
+                  const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${imdbId}`);
+                  if (tvmazeRes.ok) {
+                    const tvmazeData = await tvmazeRes.json();
+                    coverImage = tvmazeData.image?.medium || null;
+                  }
+                } catch (err) {
+                  console.error("TVMaze fallback error:", err);
+                }
+              }
               return {
                 title: m.title,
-                type: item.type === "movie" ? "movie" : "show",
+                type: (item.type === "movie" ? "movie" : "show") as "movie" | "show",
                 totalEpisodes: item.type === "show" ? m.aired_episodes || null : null,
-                coverImage: null,
+                coverImage,
                 year: m.year || null,
                 traktId: m.ids?.trakt || null,
               };
             })
           );
+          setSearchResults(enrichedResults);
         }
       }
     } catch (err) {
@@ -1232,6 +1386,8 @@ export default function Dashboard() {
             disconnectTrakt={disconnectTrakt}
             syncTrakt={syncTrakt}
             isSyncingTrakt={isSyncingTrakt}
+            enrichMissingPosters={enrichMissingPosters}
+            isEnrichingPosters={isEnrichingPosters}
           />
         )}
 

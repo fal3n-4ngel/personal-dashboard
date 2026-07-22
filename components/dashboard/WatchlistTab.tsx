@@ -32,6 +32,8 @@ interface WatchlistTabProps {
   disconnectTrakt?: () => void;
   syncTrakt?: () => void;
   isSyncingTrakt?: boolean;
+  enrichMissingPosters?: () => void;
+  isEnrichingPosters?: boolean;
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle";
@@ -83,6 +85,8 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   disconnectTrakt,
   syncTrakt,
   isSyncingTrakt,
+  enrichMissingPosters,
+  isEnrichingPosters = false,
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed">("all");
   const [activeCategoryTab, setActiveCategoryTab] = React.useState<"all_media" | "anime">("all_media");
@@ -161,7 +165,13 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
         {/* AniList Card */}
         <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-sm font-bold text-white">AL</div>
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.05)] bg-[#1e2630]">
+              <svg viewBox="0 0 512 512" className="h-full w-full">
+                <path d="M0 0h512v512H0" fill="#1e2630"/>
+                <path d="M321.92 323.27V136.6c0-10.698-5.887-16.602-16.558-16.602h-36.433c-10.672 0-16.561 5.904-16.561 16.602v88.651c0 2.497 23.996 14.089 24.623 16.541 18.282 71.61 3.972 128.92-13.359 131.6 28.337 1.405 31.455 15.064 10.348 5.731 3.229-38.209 15.828-38.134 52.049-1.406.31.317 7.427 15.282 7.87 15.282h85.545c10.672 0 16.558-5.9 16.558-16.6v-36.524c0-10.698-5.886-16.602-16.558-16.602z" fill="#02a9ff"/>
+                <path d="M170.68 120 74.999 393h74.338l16.192-47.222h80.96L262.315 393h73.968l-95.314-273zm11.776 165.28 23.183-75.629 25.393 75.629z" fill="#fefefe"/>
+              </svg>
+            </div>
             <div>
               <p className="text-sm font-semibold text-text-primary">Connect AniList</p>
               <p className="text-[11px] text-text-muted">Sync your anime and manga watch progress automatically.</p>
@@ -186,7 +196,26 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
         {/* Trakt Card */}
         <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ed1c24] text-xs font-bold text-white">TR</div>
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.05)] bg-transparent">
+              <svg viewBox="0 0 48 48" className="h-full w-full">
+                <defs>
+                  <radialGradient id="trakt-card-grad" cx="48.46" cy="-.95" r="64.84" fx="48.46" fy="-.95" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#9f42c6"/>
+                    <stop offset=".27" stopColor="#a041c3"/>
+                    <stop offset=".42" stopColor="#a43ebb"/>
+                    <stop offset=".53" stopColor="#aa39ad"/>
+                    <stop offset=".64" stopColor="#b4339a"/>
+                    <stop offset=".73" stopColor="#c02b81"/>
+                    <stop offset=".82" stopColor="#cf2061"/>
+                    <stop offset=".9" stopColor="#e1143c"/>
+                    <stop offset=".97" stopColor="#f50613"/>
+                    <stop offset="1" stopColor="red"/>
+                  </radialGradient>
+                </defs>
+                <circle cx="24" cy="24" r="24" fill="url(#trakt-card-grad)"/>
+                <path d="m13.62 17.97 7.92 7.92 1.47-1.47-7.92-7.92-1.47 1.47Zm14.39 14.4 1.47-1.46-2.16-2.16L47.64 8.43c-.19-.75-.46-1.46-.79-2.14L24.39 28.75l3.62 3.62Zm-15.09-13.7-1.46 1.46 14.4 14.4 1.46-1.47L23 28.75 46.35 5.4c-.36-.6-.78-1.16-1.25-1.68L21.54 27.28l-8.62-8.61Zm34.95-9.09L28.7 28.75l1.47 1.46L48 12.38v-1.12c0-.57-.04-1.14-.13-1.68ZM25.16 22.27l-7.92-7.92-1.47 1.47 7.92 7.92 1.47-1.47Zm16.16 12.85c0 3.42-2.78 6.2-6.2 6.2H12.88c-3.42 0-6.2-2.78-6.2-6.2V12.88c0-3.42 2.78-6.21 6.2-6.21h20.78V4.6H12.88c-4.56 0-8.28 3.71-8.28 8.28v22.24c0 4.56 3.71 8.28 8.28 8.28h22.24c4.56 0 8.28-3.71 8.28-8.28v-3.51h-2.07v3.51Z" fill="#fff"/>
+              </svg>
+            </div>
             <div>
               <p className="text-sm font-semibold text-text-primary">Connect Trakt</p>
               <p className="text-[11px] text-text-muted">Sync your movies and TV shows watch progress automatically.</p>
@@ -211,7 +240,13 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
         {/* Letterboxd Card */}
         <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
           <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00e054] text-sm font-bold text-white">•••</div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1c1b18] text-white">
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
+                <circle cx="7" cy="12" r="3.5" fill="#ff7a00" />
+                <circle cx="12" cy="12" r="3.5" fill="#00e054" />
+                <circle cx="17" cy="12" r="3.5" fill="#00b0ea" />
+              </svg>
+            </div>
             <div>
               <p className="text-sm font-semibold text-text-primary">Import Letterboxd</p>
               <p className="text-[11px] text-text-muted">Upload your Letterboxd CSV (watchlist or watched) to import your movies.</p>
@@ -291,6 +326,17 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
 
             {/* Right side status pills & dropdown */}
             <div className="flex flex-wrap items-center gap-2.5">
+              {watchlist.some((w) => !w.coverImage && (w.type === "movie" || w.type === "show")) && enrichMissingPosters && (
+                <button
+                  onClick={enrichMissingPosters}
+                  disabled={isEnrichingPosters}
+                  className="rounded-md border border-border-subtle bg-bg-card hover:bg-bg-secondary text-[11px] font-semibold text-text-primary px-3 py-1.5 flex items-center gap-1 cursor-pointer transition-all duration-150 disabled:opacity-50"
+                  title="Scan for items with missing cover art and fetch them from OMDb/TVMaze"
+                >
+                  ✨ {isEnrichingPosters ? "Fetching..." : "Fetch Posters"}
+                </button>
+              )}
+
               {activeCategoryTab === "all_media" && (
                 <select
                   value={watchlistFilter}
@@ -304,13 +350,15 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
               )}
 
               <div className="flex gap-1 rounded-lg bg-bg-secondary p-[3px]">
-                {[
-                  { id: "all", label: "All" },
-                  { id: "watching", label: "👁️ Watching" },
-                  { id: "plan_to_watch", label: "⏳ Plan" },
-                  { id: "completed", label: "✅ Done" },
-                ].map((st) => (
-                  <button key={st.id} onClick={() => setStatusFilter(st.id as any)} className={statusPillClass(statusFilter === st.id)}>
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "watching", label: "👁️ Watching" },
+                    { id: "plan_to_watch", label: "⏳ Plan" },
+                    { id: "completed", label: "✅ Done" },
+                  ] as const
+                ).map((st) => (
+                  <button key={st.id} onClick={() => setStatusFilter(st.id)} className={statusPillClass(statusFilter === st.id)}>
                     {st.label}
                   </button>
                 ))}

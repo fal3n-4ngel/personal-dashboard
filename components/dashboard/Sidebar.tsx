@@ -133,7 +133,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <button onClick={connectAnilist} className={`${navLinkClass(false)} w-full border-none bg-transparent text-left`}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <svg width="13" height="13" viewBox="0 0 512 512" fill="none">
+                <path d="M321.92 323.27V136.6c0-10.698-5.887-16.602-16.558-16.602h-36.433c-10.672 0-16.561 5.904-16.561 16.602v88.651c0 2.497 23.996 14.089 24.623 16.541 18.282 71.61 3.972 128.92-13.359 131.6 28.337 1.405 31.455 15.064 10.348 5.731 3.229-38.209 15.828-38.134 52.049-1.406.31.317 7.427 15.282 7.87 15.282h85.545c10.672 0 16.558-5.9 16.558-16.6v-36.524c0-10.698-5.886-16.602-16.558-16.602z" fill="#02a9ff"/>
+                <path d="M170.68 120 74.999 393h74.338l16.192-47.222h80.96L262.315 393h73.968l-95.314-273zm11.776 165.28 23.183-75.629 25.393 75.629z" fill="currentColor"/>
+              </svg>
               Connect AniList
             </button>
           )}
@@ -165,7 +168,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <button onClick={connectTrakt} className={`${navLinkClass(false)} w-full border-none bg-transparent text-left`}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <svg width="13" height="13" viewBox="0 0 48 48" fill="none">
+                <defs>
+                  <radialGradient id="trakt-sidebar-grad" cx="48.46" cy="-.95" r="64.84" fx="48.46" fy="-.95" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#9f42c6"/>
+                    <stop offset=".27" stopColor="#a041c3"/>
+                    <stop offset=".42" stopColor="#a43ebb"/>
+                    <stop offset=".53" stopColor="#aa39ad"/>
+                    <stop offset=".64" stopColor="#b4339a"/>
+                    <stop offset=".73" stopColor="#c02b81"/>
+                    <stop offset=".82" stopColor="#cf2061"/>
+                    <stop offset=".9" stopColor="#e1143c"/>
+                    <stop offset=".97" stopColor="#f50613"/>
+                    <stop offset="1" stopColor="red"/>
+                  </radialGradient>
+                </defs>
+                <path d="M48 11.26v25.47C48 42.95 42.95 48 36.73 48H11.26C5.04 48 0 42.95 0 36.73V11.26C0 5.04 5.04 0 11.26 0h25.47a11.24 11.24 0 0 1 9.62 5.4c.18.29.34.59.5.89.33.68.6 1.39.79 2.14.1.37.18.76.23 1.15.09.54.13 1.11.13 1.68Z" fill="url(#trakt-sidebar-grad)"/>
+                <path d="m13.62 17.97 7.92 7.92 1.47-1.47-7.92-7.92-1.47 1.47Zm14.39 14.4 1.47-1.46-2.16-2.16L47.64 8.43c-.19-.75-.46-1.46-.79-2.14L24.39 28.75l3.62 3.62Zm-15.09-13.7-1.46 1.46 14.4 14.4 1.46-1.47L23 28.75 46.35 5.4c-.36-.6-.78-1.16-1.25-1.68L21.54 27.28l-8.62-8.61Zm34.95-9.09L28.7 28.75l1.47 1.46L48 12.38v-1.12c0-.57-.04-1.14-.13-1.68ZM25.16 22.27l-7.92-7.92-1.47 1.47 7.92 7.92 1.47-1.47Zm16.16 12.85c0 3.42-2.78 6.2-6.2 6.2H12.88c-3.42 0-6.2-2.78-6.2-6.2V12.88c0-3.42 2.78-6.21 6.2-6.21h20.78V4.6H12.88c-4.56 0-8.28 3.71-8.28 8.28v22.24c0 4.56 3.71 8.28 8.28 8.28h22.24c4.56 0 8.28-3.71 8.28-8.28v-3.51h-2.07v3.51Z" fill="#fff"/>
+              </svg>
               Connect Trakt
             </button>
           )}
@@ -174,7 +194,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer */}
       <div className="mt-4 flex flex-col gap-1">
-        <a href="/assistant" className="mb-1 flex items-center gap-3 rounded-none border-t border-border-subtle pt-3.5 text-xs font-medium text-text-secondary no-underline transition-all duration-200 hover:bg-bg-primary hover:text-text-primary">
+        <div className="border-t border-border-subtle my-2 mx-1" />
+        <a href="/assistant" className="mb-1 flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-xs font-medium text-text-secondary no-underline transition-all duration-200 hover:bg-bg-primary hover:text-text-primary">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
           Connect AI Agent
         </a>
@@ -188,7 +209,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {user && (
-          <div className="mt-4 flex items-center gap-2.5 border-t border-border-subtle px-2 py-2.5">
+          <div className="mt-4 flex items-center gap-2.5 border-t border-border-subtle px-3.5 py-3">
             {user.photoURL ? (
               <img src={user.photoURL} alt="profile" className="h-8 w-8 rounded-full object-cover" referrerPolicy="no-referrer" />
             ) : (
