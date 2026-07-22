@@ -96,6 +96,20 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
   isFetchingExpenses,
   expensesLoaded,
 }) => {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const pageSize = 15;
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [expenseSearch, ledgerCategoryFilter, ledgerMinAmount, ledgerMaxAmount]);
+
+  const totalItems = filteredExpenses.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const paginatedExpenses = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredExpenses.slice(start, start + pageSize);
+  }, [filteredExpenses, currentPage, pageSize]);
+
   return (
     <>
       {/* Tab controls & currency selector */}
@@ -429,7 +443,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredExpenses.map((exp) => (
+                    {paginatedExpenses.map((exp) => (
                       <tr key={exp.id}>
                         <td style={{ fontWeight: 500 }}>
                           {exp.title}
@@ -454,7 +468,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
                         </td>
                       </tr>
                     ))}
-                    {filteredExpenses.length === 0 && (
+                    {totalItems === 0 && (
                       <tr>
                         <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: "24px" }}>
                           {isFetchingExpenses ? "Loading expenses..." : "No transactions match your filter."}
@@ -464,6 +478,36 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    Showing {Math.min(totalItems, (currentPage - 1) * pageSize + 1)}-{Math.min(totalItems, currentPage * pageSize)} of {totalItems} transactions
+                  </span>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      className="btn-secondary"
+                      style={{ fontSize: "11px", padding: "4px 10px", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.5 : 1 }}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ fontSize: "11px", alignSelf: "center", color: "var(--text-secondary)", fontWeight: 600, margin: "0 6px" }}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      className="btn-secondary"
+                      style={{ fontSize: "11px", padding: "4px 10px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages ? 0.5 : 1 }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

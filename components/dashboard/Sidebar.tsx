@@ -9,8 +9,12 @@ interface SidebarProps {
   traktUser: TraktUser | null;
   connectAnilist: () => void;
   disconnectAnilist: () => void;
+  syncAnilist?: () => void;
+  isSyncingAnilist?: boolean;
   connectTrakt: () => void;
   disconnectTrakt: () => void;
+  syncTrakt?: () => void;
+  isSyncingTrakt?: boolean;
   showInvestmentsTab: boolean;
   setShowOnboarding: (show: boolean) => void;
   triggerConfirm: (
@@ -34,8 +38,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   traktUser,
   connectAnilist,
   disconnectAnilist,
+  syncAnilist,
+  isSyncingAnilist,
   connectTrakt,
   disconnectTrakt,
+  syncTrakt,
+  isSyncingTrakt,
   showInvestmentsTab,
   setShowOnboarding,
   triggerConfirm,
@@ -47,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="sidebar">
       {/* Brand Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 8px", marginBottom: "24px" }}>
         <svg width="22" height="22" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="1.6" y="1.6" width="7.2" height="7.2" rx="1.8" fill="var(--text-primary)" />
           <rect x="11.2" y="1.6" width="7.2" height="7.2" rx="1.8" fill="var(--text-primary)" opacity="0.55" />
@@ -60,13 +68,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Main Navigation */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1, overflowY: "auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1, overflowY: "auto" }}>
         <div
           onClick={() => setActiveTab("expenses")}
           className={`nav-link ${activeTab === "expenses" ? "active" : ""}`}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-          <span>Expenses & Subs</span>
+          <span>Expenses &amp; Subs</span>
         </div>
         <div
           onClick={() => setActiveTab("media")}
@@ -99,19 +107,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {/* Integrations section */}
-        <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid var(--border-subtle)" }}>
-          <span className="label-mono" style={{ padding: "0 8px 6px", display: "block" }}>Integrations</span>
+        {/* Integrations Section */}
+        <div style={{ marginTop: "20px", paddingTop: "14px", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "6px" }}>
+          <span className="label-mono" style={{ padding: "0 8px 4px", display: "block" }}>Integrations</span>
+          
           {anilistUser ? (
-            <div className="nav-link" style={{ justifyContent: "space-between", cursor: "default" }}>
+            <div className="nav-link" style={{ justifyContent: "space-between", cursor: "default", padding: "6px 8px" }}>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", minWidth: 0 }}>
-                {anilistUser.avatar ? <img src={anilistUser.avatar} alt="" style={{ width: "16px", height: "16px", borderRadius: "50%" }} /> : <span>🌸</span>}
+                {anilistUser.avatar ? <img src={anilistUser.avatar} alt="" style={{ width: "18px", height: "18px", borderRadius: "50%" }} /> : <span>🌸</span>}
                 <div style={{ overflow: "hidden" }}>
                   <p style={{ fontSize: "11px", fontWeight: 600 }}>AniList</p>
                   <p style={{ fontSize: "9px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{anilistUser.name}</p>
                 </div>
               </div>
-              <button onClick={disconnectAnilist} title="Disconnect AniList" style={{ backgroundColor: "transparent", border: "none", color: "var(--text-muted)", padding: "2px", cursor: "pointer" }}>✕</button>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                {syncAnilist && (
+                  <button onClick={syncAnilist} disabled={isSyncingAnilist} title="Sync AniList Library" className="sidebar-action-btn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isSyncingAnilist ? "spin 1s linear infinite" : "none" }}>
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                    </svg>
+                  </button>
+                )}
+                <button onClick={disconnectAnilist} title="Disconnect AniList" className="sidebar-action-btn">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ) : (
             <button onClick={connectAnilist} className="nav-link" style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer" }}>
@@ -121,15 +144,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           {traktUser ? (
-            <div className="nav-link" style={{ justifyContent: "space-between", cursor: "default" }}>
+            <div className="nav-link" style={{ justifyContent: "space-between", cursor: "default", padding: "6px 8px" }}>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", minWidth: 0 }}>
-                {traktUser.avatar ? <img src={traktUser.avatar} alt="" style={{ width: "16px", height: "16px", borderRadius: "50%" }} /> : <span>🔴</span>}
+                {traktUser.avatar ? <img src={traktUser.avatar} alt="" style={{ width: "18px", height: "18px", borderRadius: "50%" }} /> : <span>🔴</span>}
                 <div style={{ overflow: "hidden" }}>
                   <p style={{ fontSize: "11px", fontWeight: 600 }}>Trakt</p>
                   <p style={{ fontSize: "9px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{traktUser.name || traktUser.username}</p>
                 </div>
               </div>
-              <button onClick={disconnectTrakt} title="Disconnect Trakt" style={{ backgroundColor: "transparent", border: "none", color: "var(--text-muted)", padding: "2px", cursor: "pointer" }}>✕</button>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                {syncTrakt && (
+                  <button onClick={syncTrakt} disabled={isSyncingTrakt} title="Sync Trakt Library" className="sidebar-action-btn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isSyncingTrakt ? "spin 1s linear infinite" : "none" }}>
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                    </svg>
+                  </button>
+                )}
+                <button onClick={disconnectTrakt} title="Disconnect Trakt" className="sidebar-action-btn">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ) : (
             <button onClick={connectTrakt} className="nav-link" style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer" }}>
@@ -141,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Footer */}
-      <div>
+      <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "4px" }}>
         <a href="/assistant" className="nav-link" style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "14px", borderRadius: 0, fontSize: "12px" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
           Connect AI Agent
@@ -156,14 +193,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {user && (
-          <div className="profile-card">
+          <div className="profile-card" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 8px" }}>
             {user.photoURL ? (
               <img src={user.photoURL} alt="profile" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} referrerPolicy="no-referrer" />
             ) : (
-              <div className="profile-avatar">{(user.displayName || user.email || "U")[0].toUpperCase()}</div>
+              <div className="profile-avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--bg-secondary)", fontWeight: 600 }}>
+                {(user.displayName || user.email || "U")[0].toUpperCase()}
+              </div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.displayName || "User"}</p>
+              <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-primary)" }}>{user.displayName || "User"}</p>
               <p style={{ fontSize: "10px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</p>
             </div>
             <button
@@ -180,9 +219,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }, false, "Sign Out");
               }}
               title="Sign out"
-              style={{ backgroundColor: "transparent", padding: "4px", color: "var(--text-muted)", border: "none", cursor: "pointer" }}
+              className="sidebar-action-btn"
+              style={{ padding: "6px" }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
             </button>
           </div>
         )}

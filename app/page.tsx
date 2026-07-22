@@ -16,6 +16,7 @@ import {
 import { getNextFutureBillingDate, getSalaryCycleRange } from "@/lib/dates";
 import { anilistQuery } from "@/lib/anilist";
 import { traktRequest } from "@/lib/trakt-client";
+import type { SyncEntry } from "@/lib/firebase";
 
 // Modular Dashboard Components
 import LandingPage from "@/components/landing/LandingPage";
@@ -103,7 +104,7 @@ export default function Dashboard() {
   const [bookQuery, setBookQuery] = useState("");
   const [isSearchingBooks, setIsSearchingBooks] = useState(false);
   const [bookResults, setBookResults] = useState<SearchResult[]>([]);
-  const [bookFilter, setBookFilter] = useState<"all" | "reading" | "to_read" | "completed">("all");
+  const [bookFilter, setBookFilter] = useState<"all" | "reading" | "to_read" | "completed">("reading");
 
   // Notes State
   const [noteContent, setNoteContent] = useState("");
@@ -230,6 +231,166 @@ export default function Dashboard() {
     localStorage.removeItem("trakt_refresh_token");
     setTraktUser(null);
   }
+
+  /* ─── AniList & Trakt Library Sync ─── */
+  const [isSyncingAnilist, setIsSyncingAnilist] = useState(false);
+  const [isSyncingTrakt, setIsSyncingTrakt] = useState(false);
+
+  const syncAnilist = async () => {
+    if (!anilistUser?.token) {
+      connectAnilist();
+      return;
+    }
+    setIsSyncingAnilist(true);
+    try {
+      const viewerData = await anilistQuery(`query { Viewer { id } }`, {}, anilistUser.token);
+      const userId = viewerData?.data?.Viewer?.id;
+      if (!userId) throw new Error("Could not fetch AniList profile.");
+
+      const query = `
+        query ($userId: Int) {
+          MediaListCollection(userId: $userId, type: ANIME) {
+            lists {
+              entries {
+                status
+                progress
+                score(format: POINT_10)
+                media {
+                  id
+                  title { english romaji }
+                  episodes
+                  coverImage { large }
+                  startDate { year }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const data = await anilistQuery(query, { userId }, anilistUser.token);
+      const lists = data?.data?.MediaListCollection?.lists || [];
+      const entries: SyncEntry[] = [];
+
+      for (const list of lists) {
+        for (const entry of list.entries || []) {
+          const media = entry.media;
+          if (!media) continue;
+
+          let status: WatchlistItem["status"] = "plan_to_watch";
+          if (entry.status === "CURRENT") status = "watching";
+          else if (entry.status === "COMPLETED") status = "completed";
+          else if (entry.status === "DROPPED") status = "dropped";
+          else if (entry.status === "PAUSED") status = "watching";
+
+          const title = media.title?.english || media.title?.romaji || "Untitled Anime";
+          entries.push({
+            title,
+            type: "anime",
+            status,
+            progress: entry.progress || 0,
+            totalEpisodes: media.episodes || null,
+            rating: entry.score ? Number(entry.score) : null,
+            coverImage: media.coverImage?.large || null,
+            year: media.startDate?.year || null,
+            anilistId: media.id,
+          });
+        }
+      }
+
+      if (entries.length > 0) {
+        const res = await fetch("/api/watchlist/sync", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ source: "anilist", entries }),
+        });
+        if (res.ok) {
+          const result = await res.json();
+          await fetchWatchlist();
+          triggerAlert("AniList Sync Complete", `Successfully synced ${result.added || 0} new and ${result.updated || 0} updated anime titles!`, "success");
+        } else {
+          throw new Error("Server rejected sync payload.");
+        }
+      } else {
+        triggerAlert("AniList Sync", "No anime items found in your AniList account.", "info");
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerAlert("AniList Sync Error", err?.message || "Failed to sync with AniList.", "danger");
+    } finally {
+      setIsSyncingAnilist(false);
+    }
+  };
+
+  const syncTrakt = async () => {
+    if (!traktUser?.accessToken) {
+      connectTrakt();
+      return;
+    }
+    setIsSyncingTrakt(true);
+    try {
+      const idToken = user?.idToken;
+      const movies = await traktRequest(idToken, "sync/watched/movies", { token: traktUser.accessToken });
+      const shows = await traktRequest(idToken, "sync/watched/shows", { token: traktUser.accessToken });
+
+      const entries: SyncEntry[] = [];
+
+      if (Array.isArray(movies)) {
+        for (const item of movies) {
+          if (!item?.movie) continue;
+          entries.push({
+            title: item.movie.title,
+            type: "movie",
+            status: "completed",
+            progress: 1,
+            totalEpisodes: 1,
+            rating: item.rating ? Number(item.rating) : null,
+            coverImage: null,
+            year: item.movie.year || null,
+            traktId: item.movie.ids?.trakt,
+          });
+        }
+      }
+
+      if (Array.isArray(shows)) {
+        for (const item of shows) {
+          if (!item?.show) continue;
+          entries.push({
+            title: item.show.title,
+            type: "show",
+            status: "watching",
+            progress: item.plays || 1,
+            totalEpisodes: null,
+            rating: item.rating ? Number(item.rating) : null,
+            coverImage: null,
+            year: item.show.year || null,
+            traktId: item.show.ids?.trakt,
+          });
+        }
+      }
+
+      if (entries.length > 0) {
+        const res = await fetch("/api/watchlist/sync", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ source: "trakt", entries }),
+        });
+        if (res.ok) {
+          const result = await res.json();
+          await fetchWatchlist();
+          triggerAlert("Trakt Sync Complete", `Successfully synced ${result.added || 0} new and ${result.updated || 0} updated movies & shows!`, "success");
+        } else {
+          throw new Error("Server rejected sync payload.");
+        }
+      } else {
+        triggerAlert("Trakt Sync", "No watched items found in your Trakt account.", "info");
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerAlert("Trakt Sync Error", err?.message || "Failed to sync with Trakt.", "danger");
+    } finally {
+      setIsSyncingTrakt(false);
+    }
+  };
 
   /* ─── Handle OAuth Tokens & Firebase Auth ─── */
   useEffect(() => {
@@ -910,8 +1071,12 @@ export default function Dashboard() {
         traktUser={traktUser}
         connectAnilist={connectAnilist}
         disconnectAnilist={disconnectAnilist}
+        syncAnilist={syncAnilist}
+        isSyncingAnilist={isSyncingAnilist}
         connectTrakt={connectTrakt}
         disconnectTrakt={disconnectTrakt}
+        syncTrakt={syncTrakt}
+        isSyncingTrakt={isSyncingTrakt}
         showInvestmentsTab={showInvestmentsTab}
         setShowOnboarding={setShowOnboarding}
         triggerConfirm={triggerConfirm}
@@ -1020,6 +1185,16 @@ export default function Dashboard() {
             setLetterboxdCsv={setLetterboxdCsv}
             handleLetterboxdImport={handleLetterboxdImport}
             isImportingLetterboxd={isImportingLetterboxd}
+            anilistUser={anilistUser}
+            connectAnilist={connectAnilist}
+            disconnectAnilist={disconnectAnilist}
+            syncAnilist={syncAnilist}
+            isSyncingAnilist={isSyncingAnilist}
+            traktUser={traktUser}
+            connectTrakt={connectTrakt}
+            disconnectTrakt={disconnectTrakt}
+            syncTrakt={syncTrakt}
+            isSyncingTrakt={isSyncingTrakt}
           />
         )}
 

@@ -22,6 +22,16 @@ interface WatchlistTabProps {
   setLetterboxdCsv: (s: string) => void;
   handleLetterboxdImport: () => void;
   isImportingLetterboxd: boolean;
+  anilistUser?: any;
+  connectAnilist?: () => void;
+  disconnectAnilist?: () => void;
+  syncAnilist?: () => void;
+  isSyncingAnilist?: boolean;
+  traktUser?: any;
+  connectTrakt?: () => void;
+  disconnectTrakt?: () => void;
+  syncTrakt?: () => void;
+  isSyncingTrakt?: boolean;
 }
 
 export const WatchlistTab: React.FC<WatchlistTabProps> = ({
@@ -45,275 +55,387 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   setLetterboxdCsv,
   handleLetterboxdImport,
   isImportingLetterboxd,
+  anilistUser,
+  connectAnilist,
+  disconnectAnilist,
+  syncAnilist,
+  isSyncingAnilist,
+  traktUser,
+  connectTrakt,
+  disconnectTrakt,
+  syncTrakt,
+  isSyncingTrakt,
 }) => {
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed" | "dropped">("all");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed">("all");
+  const [activeCategoryTab, setActiveCategoryTab] = React.useState<"all_media" | "anime">("all_media");
 
+  // Strict filtering fix:
+  // "all_media" (Movies & Shows tab) ONLY shows Movies and TV Shows.
+  // "anime" (Anime tab) ONLY shows Anime.
   const filteredWatchlist = watchlist.filter((item) => {
     if (item.type === "book") return false;
-    if (watchlistFilter !== "all" && item.type !== watchlistFilter) return false;
+    if (activeCategoryTab === "anime") {
+      if (item.type !== "anime") return false;
+    } else {
+      if (item.type !== "movie" && item.type !== "show") return false;
+      if (watchlistFilter !== "all" && item.type !== watchlistFilter) return false;
+    }
     if (statusFilter !== "all" && item.status !== statusFilter) return false;
     return true;
   });
 
-  const moviesWatched = watchlist.filter((i) => i.type === "movie" && i.status === "completed").length;
-  const showsWatching = watchlist.filter((i) => i.type === "show" && i.status === "watching").length;
-  const animeCompleted = watchlist.filter((i) => i.type === "anime" && i.status === "completed").length;
-  const episodesWatched = watchlist.filter((i) => i.type === "show" || i.type === "anime").reduce((acc, i) => acc + (i.progress || 0), 0);
-  const planToWatch = watchlist.filter((i) => i.type !== "book" && i.status === "plan_to_watch").length;
+  const watchingAnime = watchlist.filter((i) => i.type === "anime" && i.status === "watching").length;
+  const watchingShows = watchlist.filter((i) => i.type === "show" && i.status === "watching").length;
+  const watchingTotal = watchingAnime + watchingShows;
+
+  const planAnime = watchlist.filter((i) => i.type === "anime" && i.status === "plan_to_watch").length;
+  const planShows = watchlist.filter((i) => i.type === "show" && i.status === "plan_to_watch").length;
+  const planTotal = planAnime + planShows;
+
+  const completedAnime = watchlist.filter((i) => i.type === "anime" && i.status === "completed").length;
+  const completedShows = watchlist.filter((i) => (i.type === "show" || i.type === "movie") && i.status === "completed").length;
+  const completedTotal = completedAnime + completedShows;
+
+  const totalAnime = watchlist.filter((i) => i.type === "anime").length;
+  const totalShows = watchlist.filter((i) => i.type === "show").length;
+  const totalMovies = watchlist.filter((i) => i.type === "movie").length;
 
   return (
-    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>Media Watchlist</h1>
-        <button
-          onClick={() => setShowLetterboxdModal(true)}
-          className="btn-secondary"
-          style={{ fontSize: "12px", padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Import Letterboxd CSV
-        </button>
-      </div>
-
-      {/* Media Overview Stat Cards */}
-      <div className="responsive-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "16px" }}>
+    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* 4 Overview Stat Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
         <div className="stat-card">
-          <span className="label-mono">Movies Watched</span>
-          <span className="stat-value">{moviesWatched}</span>
-          <span className="stat-subtext">Completed movies</span>
-        </div>
-        <div className="stat-card">
-          <span className="label-mono">Shows Watching</span>
-          <span className="stat-value" style={{ color: "#3b82f6" }}>{showsWatching}</span>
-          <span className="stat-subtext">TV shows in progress</span>
-        </div>
-        <div className="stat-card">
-          <span className="label-mono">Anime Completed</span>
-          <span className="stat-value" style={{ color: "#ec4899" }}>{animeCompleted}</span>
-          <span className="stat-subtext">Finished anime</span>
-        </div>
-        <div className="stat-card">
-          <span className="label-mono">Episodes Logged</span>
-          <span className="stat-value">{episodesWatched}</span>
-          <span className="stat-subtext">Total episodes watched</span>
-        </div>
-        <div className="stat-card">
-          <span className="label-mono">Plan to Watch</span>
-          <span className="stat-value" style={{ color: "#e39282" }}>{planToWatch}</span>
-          <span className="stat-subtext">In watchlist queue</span>
-        </div>
-      </div>
-
-      {/* Search Media Card */}
-      <div className="bento-card">
-        <span className="label-mono" style={{ marginBottom: "12px", display: "block" }}>Add Movie, TV Show, or Anime</span>
-        <form onSubmit={searchMedia} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <select value={mediaType} onChange={(e) => setMediaType(e.target.value as any)} style={{ padding: "8px 12px", fontSize: "13px" }}>
-            <option value="movie">Movie</option>
-            <option value="show">TV Show</option>
-            <option value="anime">Anime</option>
-          </select>
-          <input
-            type="text"
-            placeholder={`Search ${mediaType}...`}
-            value={mediaQuery}
-            onChange={(e) => setMediaQuery(e.target.value)}
-            style={{ flex: 1, minWidth: "200px" }}
-            required
-          />
-          <button type="submit" disabled={isSearchingMedia} className="btn-primary">
-            {isSearchingMedia ? "Searching..." : "Search"}
-          </button>
-        </form>
-
-        {/* Search Results */}
-        {searchResults.length > 0 && (
-          <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
-            {searchResults.map((res, i) => (
-              <div key={i} style={{ display: "flex", gap: "10px", backgroundColor: "var(--bg-body)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)", alignItems: "center" }}>
-                {res.coverImage ? (
-                  <img src={res.coverImage} alt={res.title} style={{ width: "40px", height: "56px", objectFit: "cover", borderRadius: "4px" }} />
-                ) : (
-                  <div style={{ width: "40px", height: "56px", backgroundColor: "var(--bg-secondary)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🎬</div>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "12px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{res.title}</p>
-                  <p style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>{res.year || "—"}</p>
-                  <button
-                    onClick={() => addToWatchlist(res)}
-                    className="btn-secondary"
-                    style={{ fontSize: "10px", padding: "3px 8px", marginTop: "6px" }}
-                  >
-                    + Add
-                  </button>
-                </div>
-              </div>
-            ))}
+          <span className="label-mono">WATCHING NOW</span>
+          <span className="stat-value">{watchingTotal}</span>
+          <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "10px", fontFamily: "monospace" }}>
+            <span style={{ color: "#3b82f6", fontWeight: 600 }}>ANIME {watchingAnime}</span>
+            <span style={{ color: "var(--text-muted)" }}>TV/S {watchingShows}</span>
           </div>
-        )}
+        </div>
+        <div className="stat-card">
+          <span className="label-mono">PLAN TO WATCH</span>
+          <span className="stat-value" style={{ color: "#e39282" }}>{planTotal}</span>
+          <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "10px", fontFamily: "monospace" }}>
+            <span style={{ color: "#3b82f6", fontWeight: 600 }}>ANIME {planAnime}</span>
+            <span style={{ color: "var(--text-muted)" }}>TV/S {planShows}</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <span className="label-mono">COMPLETED</span>
+          <span className="stat-value" style={{ color: "#e39282" }}>{completedTotal}</span>
+          <div style={{ display: "flex", gap: "12px", marginTop: "4px", fontSize: "10px", fontFamily: "monospace" }}>
+            <span style={{ color: "#3b82f6", fontWeight: 600 }}>ANIME {completedAnime}</span>
+            <span style={{ color: "var(--text-muted)" }}>TV/S {completedShows}</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <span className="label-mono">LIBRARY</span>
+          <div style={{ display: "flex", gap: "16px", alignItems: "baseline", marginTop: "8px" }}>
+            <div><span style={{ fontSize: "20px", fontWeight: 700 }}>{totalAnime}</span><span style={{ fontSize: "9px", fontFamily: "monospace", color: "var(--text-muted)", marginLeft: "4px" }}>ANIME</span></div>
+            <div><span style={{ fontSize: "20px", fontWeight: 700 }}>{totalShows}</span><span style={{ fontSize: "9px", fontFamily: "monospace", color: "var(--text-muted)", marginLeft: "4px" }}>SHOWS</span></div>
+            <div><span style={{ fontSize: "20px", fontWeight: 700 }}>{totalMovies}</span><span style={{ fontSize: "9px", fontFamily: "monospace", color: "var(--text-muted)", marginLeft: "4px" }}>MOVIES</span></div>
+          </div>
+        </div>
       </div>
 
-      {/* Filter Tabs & Status Tabs */}
+      {/* Integration Banners */}
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {/* Status Tabs */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-          <div style={{ display: "flex", gap: "4px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px" }}>
-            {[
-              { id: "all", label: "All Statuses" },
-              { id: "watching", label: "Watching" },
-              { id: "plan_to_watch", label: "Plan to Watch" },
-              { id: "completed", label: "Completed" },
-              { id: "dropped", label: "Dropped" },
-            ].map((st) => (
+        {/* AniList Card */}
+        <div className="bento-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "14px" }}>AL</div>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: "14px" }}>Connect AniList</p>
+              <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>Sync your anime and manga watch progress automatically.</p>
+            </div>
+          </div>
+          {anilistUser ? (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {syncAnilist && (
+                <button onClick={syncAnilist} disabled={isSyncingAnilist} className="btn-primary" style={{ fontSize: "12px", padding: "8px 18px", height: "36px" }}>
+                  {isSyncingAnilist ? "Syncing..." : "Sync Now"}
+                </button>
+              )}
+              <button onClick={disconnectAnilist} className="btn-secondary" style={{ fontSize: "12px", padding: "8px 18px", height: "36px" }}>Disconnect ({anilistUser.name})</button>
+            </div>
+          ) : (
+            <button onClick={connectAnilist} className="btn-primary" style={{ fontSize: "12px", padding: "8px 20px", height: "36px" }}>Connect</button>
+          )}
+        </div>
+
+        {/* Trakt Card */}
+        <div className="bento-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#ed1c24", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "12px" }}>TR</div>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: "14px" }}>Connect Trakt</p>
+              <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>Sync your movies and TV shows watch progress automatically.</p>
+            </div>
+          </div>
+          {traktUser ? (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {syncTrakt && (
+                <button onClick={syncTrakt} disabled={isSyncingTrakt} className="btn-primary" style={{ fontSize: "12px", padding: "8px 18px", height: "36px" }}>
+                  {isSyncingTrakt ? "Syncing..." : "Sync Now"}
+                </button>
+              )}
+              <button onClick={disconnectTrakt} className="btn-secondary" style={{ fontSize: "12px", padding: "8px 18px", height: "36px" }}>Disconnect ({traktUser.name || traktUser.username})</button>
+            </div>
+          ) : (
+            <button onClick={connectTrakt} className="btn-primary" style={{ fontSize: "12px", padding: "8px 20px", height: "36px" }}>Connect</button>
+          )}
+        </div>
+
+        {/* Letterboxd Card */}
+        <div className="bento-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#00e054", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "14px" }}>•••</div>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: "14px" }}>Import Letterboxd</p>
+              <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>Upload your Letterboxd CSV (watchlist or watched) to import your movies.</p>
+            </div>
+          </div>
+          <button onClick={() => setShowLetterboxdModal(true)} style={{ backgroundColor: "#00e054", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "12px", fontWeight: 600, cursor: "pointer", height: "36px" }}>Upload CSV</button>
+        </div>
+      </div>
+
+      {/* Main 2-Column Section */}
+      <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "20px", alignItems: "start" }}>
+        {/* Left Column: SEARCH & ADD */}
+        <div className="bento-card">
+          <span className="label-mono" style={{ marginBottom: "4px", display: "block" }}>SEARCH &amp; ADD</span>
+          <p style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "14px" }}>AniList &amp; Trakt search</p>
+
+          <form onSubmit={searchMedia} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <input
+              type="text"
+              placeholder="Search title"
+              value={mediaQuery}
+              onChange={(e) => setMediaQuery(e.target.value)}
+              required
+              style={{ width: "100%" }}
+            />
+
+            <select value={mediaType} onChange={(e) => setMediaType(e.target.value as any)} style={{ width: "100%", padding: "8px 10px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--border-subtle)" }}>
+              <option value="movie">Movies (Trakt)</option>
+              <option value="show">TV Shows (Trakt)</option>
+              <option value="anime">Anime (AniList)</option>
+            </select>
+
+            <button type="submit" disabled={isSearchingMedia} className="btn-primary" style={{ width: "100%", padding: "10px", marginTop: "4px" }}>
+              {isSearchingMedia ? "Searching..." : "Search"}
+            </button>
+          </form>
+
+          {/* Search Results */}
+          {searchResults.length > 0 && (
+            <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px", maxHeight: "300px", overflowY: "auto" }}>
+              {searchResults.map((res, i) => (
+                <div key={i} style={{ display: "flex", gap: "10px", backgroundColor: "var(--bg-secondary)", padding: "8px", borderRadius: "6px", alignItems: "center" }}>
+                  {res.coverImage ? (
+                    <img src={res.coverImage} alt={res.title} style={{ width: "32px", height: "46px", objectFit: "cover", borderRadius: "4px" }} />
+                  ) : (
+                    <div style={{ width: "32px", height: "46px", backgroundColor: "var(--bg-card)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>🎬</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{res.title}</p>
+                    <p style={{ fontSize: "10px", color: "var(--text-muted)" }}>{res.year || "—"}</p>
+                    <button
+                      onClick={() => addToWatchlist(res)}
+                      style={{ fontSize: "10px", padding: "2px 6px", marginTop: "4px", backgroundColor: "var(--text-primary)", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Watchlist Bento Container */}
+        <div className="bento-card" style={{ padding: "20px" }}>
+          {/* Header Row Controls */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "12px" }}>
+            {/* Category Tabs */}
+            <div style={{ display: "flex", gap: "6px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px" }}>
               <button
-                key={st.id}
-                onClick={() => setStatusFilter(st.id as any)}
+                onClick={() => setActiveCategoryTab("all_media")}
                 style={{
                   fontSize: "12px",
                   fontWeight: 600,
-                  padding: "6px 14px",
-                  backgroundColor: statusFilter === st.id ? "#fff" : "transparent",
-                  color: statusFilter === st.id ? "var(--text-primary)" : "var(--text-secondary)",
+                  padding: "5px 14px",
+                  backgroundColor: activeCategoryTab === "all_media" ? "#fff" : "transparent",
+                  color: activeCategoryTab === "all_media" ? "var(--text-primary)" : "var(--text-secondary)",
                   borderRadius: "6px",
-                  boxShadow: statusFilter === st.id ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-                  transition: "all 0.2s",
                   border: "none",
                   cursor: "pointer",
+                  boxShadow: activeCategoryTab === "all_media" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                 }}
               >
-                {st.label}
+                🎬 Movies &amp; Shows
               </button>
-            ))}
-          </div>
-
-          {/* Type Filter Pills */}
-          <div style={{ display: "flex", gap: "4px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px" }}>
-            {(["all", "movie", "show", "anime"] as const).map((f) => (
               <button
-                key={f}
-                onClick={() => setWatchlistFilter(f)}
+                onClick={() => setActiveCategoryTab("anime")}
                 style={{
-                  fontSize: "11px",
+                  fontSize: "12px",
                   fontWeight: 600,
-                  padding: "5px 12px",
-                  backgroundColor: watchlistFilter === f ? "#fff" : "transparent",
-                  color: watchlistFilter === f ? "var(--text-primary)" : "var(--text-secondary)",
+                  padding: "5px 14px",
+                  backgroundColor: activeCategoryTab === "anime" ? "#fff" : "transparent",
+                  color: activeCategoryTab === "anime" ? "var(--text-primary)" : "var(--text-secondary)",
                   borderRadius: "6px",
-                  boxShadow: watchlistFilter === f ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
-                  transition: "all 0.2s",
                   border: "none",
                   cursor: "pointer",
-                  textTransform: "capitalize",
+                  boxShadow: activeCategoryTab === "anime" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                 }}
               >
-                {f === "all" ? "All Types" : f === "movie" ? "Movies" : f === "show" ? "TV Shows" : "Anime"}
+                🌸 Anime
               </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{filteredWatchlist.length} items</span>
-        </div>
-      </div>
+            </div>
 
-      {/* Media Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px" }}>
-        {filteredWatchlist.map((item) => (
-          <div key={item.id} className="bento-card" style={{ padding: "14px", display: "flex", gap: "12px" }}>
-            {item.coverImage ? (
-              <img src={item.coverImage} alt={item.title} style={{ width: "70px", height: "100px", objectFit: "cover", borderRadius: "6px", flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: "70px", height: "100px", backgroundColor: "var(--bg-secondary)", borderRadius: "6px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px" }}>
-                {item.type === "movie" ? "🎬" : item.type === "show" ? "📺" : "🌸"}
-              </div>
-            )}
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ fontWeight: 600, fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.title}>
-                  {item.title}
-                </p>
-                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "4px" }}>
-                  <span style={{ fontSize: "9px", fontFamily: "monospace", textTransform: "uppercase", backgroundColor: "var(--bg-secondary)", padding: "1px 5px", borderRadius: "3px", color: "var(--text-muted)" }}>
-                    {item.type}
-                  </span>
-                  {item.year && <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{item.year}</span>}
-                </div>
-              </div>
-
-              <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {/* Right side status pills & dropdown */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {activeCategoryTab === "all_media" && (
                 <select
-                  value={item.status}
-                  onChange={(e) => updateWatchItem(item, { status: e.target.value as any })}
-                  style={{ fontSize: "11px", padding: "3px 6px", width: "100%" }}
+                  value={watchlistFilter}
+                  onChange={(e) => setWatchlistFilter(e.target.value as any)}
+                  style={{ fontSize: "11px", padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--border-subtle)", backgroundColor: "#fff" }}
                 >
-                  <option value="plan_to_watch">Plan to Watch</option>
-                  <option value="watching">Watching</option>
-                  <option value="completed">Completed</option>
-                  <option value="dropped">Dropped</option>
+                  <option value="all">All Types</option>
+                  <option value="movie">Movies Only</option>
+                  <option value="show">TV Shows Only</option>
                 </select>
+              )}
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  {(item.type === "show" || item.type === "anime") && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "var(--text-secondary)" }}>
-                      <span>Ep:</span>
-                      <button
-                        onClick={() => updateWatchItem(item, { progress: Math.max(0, item.progress - 1) })}
-                        style={{ padding: "1px 5px", fontSize: "10px", backgroundColor: "var(--bg-secondary)", border: "none", borderRadius: "3px", cursor: "pointer" }}
-                      >
-                        -
-                      </button>
-                      <span>{item.progress}</span>
-                      <button
-                        onClick={() => updateWatchItem(item, { progress: item.progress + 1 })}
-                        style={{ padding: "1px 5px", fontSize: "10px", backgroundColor: "var(--bg-secondary)", border: "none", borderRadius: "3px", cursor: "pointer" }}
-                      >
-                        +
-                      </button>
-                      {item.totalEpisodes && <span style={{ color: "var(--text-muted)" }}>/{item.totalEpisodes}</span>}
+              <div style={{ display: "flex", gap: "4px", backgroundColor: "var(--bg-secondary)", borderRadius: "8px", padding: "3px" }}>
+                {[
+                  { id: "all", label: "All" },
+                  { id: "watching", label: "👁️ Watching" },
+                  { id: "plan_to_watch", label: "⏳ Plan" },
+                  { id: "completed", label: "✅ Done" },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setStatusFilter(st.id as any)}
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      padding: "5px 12px",
+                      backgroundColor: statusFilter === st.id ? "#fff" : "transparent",
+                      color: statusFilter === st.id ? "var(--text-primary)" : "var(--text-secondary)",
+                      borderRadius: "6px",
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: statusFilter === st.id ? "0 1px 3px rgba(0,0,0,0.05)" : "none",
+                    }}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Watchlist Rows */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {filteredWatchlist.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                  padding: "12px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border-subtle)",
+                  backgroundColor: "var(--bg-card)",
+                  transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                }}
+              >
+                {/* Poster & Info */}
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, minWidth: 0 }}>
+                  {item.coverImage ? (
+                    <img src={item.coverImage} alt={item.title} style={{ width: "40px", height: "56px", objectFit: "cover", borderRadius: "4px", flexShrink: 0, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }} />
+                  ) : (
+                    <div style={{ width: "40px", height: "56px", backgroundColor: "var(--bg-secondary)", borderRadius: "4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
+                      {item.type === "movie" ? "🎬" : item.type === "show" ? "📺" : "🌸"}
                     </div>
                   )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ fontWeight: 600, fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</p>
+                    <p style={{ fontSize: "10.5px", color: "var(--text-muted)", marginTop: "1px" }}>
+                      {item.type === "movie" ? "Movie" : item.type === "show" ? "Show" : "Anime"} {item.year ? `(${item.year})` : ""}
+                    </p>
+
+                    {/* Quick Episode Incrementer */}
+                    {(item.type === "show" || item.type === "anime") && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                        <span style={{ fontSize: "10px", color: "var(--text-secondary)", fontFamily: "monospace", fontWeight: 500 }}>
+                          Ep {item.progress || 0}{item.totalEpisodes ? `/${item.totalEpisodes}` : ""}
+                        </span>
+                        <button
+                          onClick={() => updateWatchItem(item, { progress: Math.max(0, (item.progress || 0) - 1) })}
+                          style={{ padding: "1px 6px", fontSize: "10px", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "3px", cursor: "pointer", fontWeight: 600 }}
+                        >
+                          -
+                        </button>
+                        <button
+                          onClick={() => updateWatchItem(item, { progress: (item.progress || 0) + 1 })}
+                          style={{ padding: "1px 6px", fontSize: "10px", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "3px", cursor: "pointer", fontWeight: 600 }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right controls: Status, Score, Delete */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <select
+                    value={item.status}
+                    onChange={(e) => updateWatchItem(item, { status: e.target.value as any })}
+                    style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", backgroundColor: "#fff", cursor: "pointer" }}
+                  >
+                    <option value="watching">Watching</option>
+                    <option value="plan_to_watch">Plan</option>
+                    <option value="completed">Completed</option>
+                    <option value="dropped">Dropped</option>
+                  </select>
+
+                  <select
+                    value={item.rating || 0}
+                    onChange={(e) => updateWatchItem(item, { rating: Number(e.target.value) || null })}
+                    style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--border-subtle)", backgroundColor: "#fff", cursor: "pointer" }}
+                  >
+                    <option value="0">Score v</option>
+                    {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((n) => (
+                      <option key={n} value={n}>★ {n}</option>
+                    ))}
+                  </select>
+
                   <button
                     onClick={() => deleteWatchItem(item.id)}
-                    style={{ backgroundColor: "transparent", border: "none", color: "#b3666b", fontSize: "11px", marginLeft: "auto", cursor: "pointer" }}
+                    style={{ backgroundColor: "transparent", border: "none", color: "#b3666b", fontSize: "14px", fontWeight: 700, padding: "4px 8px", cursor: "pointer", borderRadius: "6px" }}
+                    title="Delete item"
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(179,102,107,0.08)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    Delete
+                    ✕
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
-        {filteredWatchlist.length === 0 && (
-          <p style={{ gridColumn: "1 / -1", textAlign: "center", color: "var(--text-muted)", padding: "32px" }}>
-            {isFetchingWatchlist ? "Loading watchlist..." : "No items in your watchlist."}
-          </p>
-        )}
-      </div>
+            ))}
 
-      {/* Letterboxd Import Modal */}
-      {showLetterboxdModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", padding: "16px" }}>
-          <div className="bento-card" style={{ width: "100%", maxWidth: "500px", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-            <h3 style={{ fontSize: "16px", fontWeight: 600 }}>Import Letterboxd Watchlist CSV</h3>
-            <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-              Export your watchlist from Letterboxd (Settings &gt; Import &amp; Export &gt; Export your data), open the watchlist.csv file, and paste its raw contents below:
-            </p>
-            <textarea
-              rows={8}
-              placeholder="Date,Name,Year,Letterboxd URI..."
-              value={letterboxdCsv}
-              onChange={(e) => setLetterboxdCsv(e.target.value)}
-              style={{ width: "100%", fontFamily: "monospace", fontSize: "11px" }}
-            />
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button className="btn-secondary" onClick={() => setShowLetterboxdModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleLetterboxdImport} disabled={isImportingLetterboxd || !letterboxdCsv.trim()}>
-                {isImportingLetterboxd ? "Importing..." : "Import Movies"}
-              </button>
-            </div>
+            {filteredWatchlist.length === 0 && (
+              <p style={{ textAlign: "center", color: "var(--text-muted)", padding: "32px", fontSize: "13px" }}>
+                {isFetchingWatchlist ? "Loading watchlist..." : "No items found in this view."}
+              </p>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
