@@ -18,10 +18,11 @@ interface WatchlistTabProps {
   isFetchingWatchlist: boolean;
   showLetterboxdModal: boolean;
   setShowLetterboxdModal: (show: boolean) => void;
-  letterboxdCsv: string;
-  setLetterboxdCsv: (s: string) => void;
+  letterboxdUsername: string;
+  setLetterboxdUsername: (s: string) => void;
   handleLetterboxdImport: () => void;
   isImportingLetterboxd: boolean;
+  disconnectLetterboxd: () => void;
   anilistUser?: any;
   connectAnilist?: () => void;
   disconnectAnilist?: () => void;
@@ -72,10 +73,11 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   isFetchingWatchlist,
   showLetterboxdModal,
   setShowLetterboxdModal,
-  letterboxdCsv,
-  setLetterboxdCsv,
+  letterboxdUsername,
+  setLetterboxdUsername,
   handleLetterboxdImport,
   isImportingLetterboxd,
+  disconnectLetterboxd,
   anilistUser,
   connectAnilist,
   disconnectAnilist,
@@ -90,23 +92,57 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   isEnrichingPosters = false,
   onItemClick,
 }) => {
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed">("all");
-  const [activeCategoryTab, setActiveCategoryTab] = React.useState<"all_media" | "anime">("all_media");
+  const exportLetterboxdCSV = () => {
+    const movies = watchlist.filter((item) => item.type === "movie" && item.status === "completed");
+    const headers = ["Title", "Year", "Rating", "WatchedDate", "Rewatch", "Review", "Tags"];
+    const rows = movies.map((item) => {
+      const titleEscaped = `"${item.title.replace(/"/g, '""')}"`;
+      const year = item.year ?? "";
+      const rating = item.rating !== null && item.rating !== undefined ? (item.rating / 2).toFixed(1) : "";
+      let watchedDate = "";
+      if (item.updatedAt) {
+        const date = new Date(item.updatedAt);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const dd = String(date.getDate()).padStart(2, "0");
+        watchedDate = `${yyyy}-${mm}-${dd}`;
+      }
+      const rewatch = "No";
+      const review = "";
+      const tags = "phub-dashboard";
+      return [titleEscaped, year, rating, watchedDate, rewatch, review, tags].join(",");
+    });
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `letterboxd_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  // Strict filtering fix:
-  // "all_media" (Movies & Shows tab) ONLY shows Movies and TV Shows.
-  // "anime" (Anime tab) ONLY shows Anime.
-  const filteredWatchlist = watchlist.filter((item) => {
-    if (item.type === "book") return false;
-    if (activeCategoryTab === "anime") {
-      if (item.type !== "anime") return false;
-    } else {
-      if (item.type !== "movie" && item.type !== "show") return false;
-      if (watchlistFilter !== "all" && item.type !== watchlistFilter) return false;
-    }
-    if (statusFilter !== "all" && item.status !== statusFilter) return false;
-    return true;
-  });
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "watching" | "plan_to_watch" | "completed">("all");
+  const [activeCategoryTab, setActiveCategoryTab] = React.useState<"movie" | "show" | "anime">("movie");
+  const [titleSearch, setTitleSearch] = React.useState("");
+  const [sortBy, setSortBy] = React.useState<"title" | "rating" | "year">("title");
+
+  // Category tab is now a strict 3-way split: Movies / TV Shows / Anime each
+  // show only their own type — no more combined "Movies & Shows" bucket.
+  const filteredWatchlist = watchlist
+    .filter((item) => {
+      if (item.type !== activeCategoryTab) return false;
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (titleSearch.trim() && !item.title.toLowerCase().includes(titleSearch.trim().toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "rating") return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === "year") return (b.year || 0) - (a.year || 0);
+      return a.title.localeCompare(b.title);
+    });
 
   const watchingAnime = watchlist.filter((i) => i.type === "anime" && i.status === "watching").length;
   const watchingShows = watchlist.filter((i) => i.type === "show" && i.status === "watching").length;
@@ -163,10 +199,11 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
       </div>
 
       {/* Integration Banners */}
-      <div className="flex flex-col gap-3">
+      {/* Integration Banners Grid */}
+      <div className="grid grid-cols-4 gap-4 max-xl:grid-cols-2 max-md:grid-cols-1">
         {/* AniList Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
-          <div className="flex items-center gap-3.5">
+        <div className={`${BENTO_CARD} flex flex-col justify-between p-5 min-h-[155px]`}>
+          <div className="flex items-start gap-3.5">
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.05)] bg-[#1e2630]">
               <svg viewBox="0 0 512 512" className="h-full w-full">
                 <path d="M0 0h512v512H0" fill="#1e2630"/>
@@ -174,30 +211,37 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
                 <path d="M170.68 120 74.999 393h74.338l16.192-47.222h80.96L262.315 393h73.968l-95.314-273zm11.776 165.28 23.183-75.629 25.393 75.629z" fill="#fefefe"/>
               </svg>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Connect AniList</p>
-              <p className="text-[11px] text-text-muted">Sync your anime and manga watch progress automatically.</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text-primary">
+                {anilistUser ? "AniList Connected" : "Connect AniList"}
+              </p>
+              <p className="text-[11px] text-text-muted mt-0.5 truncate font-medium" title={anilistUser ? anilistUser.name : undefined}>
+                {anilistUser ? anilistUser.name : "Sync anime watch progress automatically."}
+              </p>
             </div>
           </div>
-          {anilistUser ? (
-            <div className="flex items-center gap-2 max-md:w-full">
-              {syncAnilist && (
-                <button onClick={syncAnilist} disabled={isSyncingAnilist} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs max-md:flex-1`}>
-                  {isSyncingAnilist ? "Syncing..." : "Sync Now"}
-                </button>
-              )}
-              <button onClick={disconnectAnilist} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs max-md:flex-1 truncate`} title={`Disconnect (${anilistUser.name})`}>
-                Disconnect ({anilistUser.name})
-              </button>
-            </div>
-          ) : (
-            <button onClick={connectAnilist} className={`${BTN_PRIMARY} h-9 px-5 text-xs max-md:w-full`}>Connect</button>
-          )}
+          <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+            {anilistUser ? (
+              <>
+                <span className="text-[10px] font-mono text-text-muted">Status: Active</span>
+                <div className="flex gap-2">
+                  {syncAnilist && (
+                    <button onClick={syncAnilist} disabled={isSyncingAnilist} className="text-xs font-semibold text-text-primary hover:underline bg-transparent border-none cursor-pointer">
+                      {isSyncingAnilist ? "Syncing..." : "Sync"}
+                    </button>
+                  )}
+                  <button onClick={disconnectAnilist} className="text-xs font-semibold text-red-500 hover:underline bg-transparent border-none cursor-pointer">Disconnect</button>
+                </div>
+              </>
+            ) : (
+              <button onClick={connectAnilist} className={`${BTN_PRIMARY} h-8 px-4 text-xs w-full`}>Connect</button>
+            )}
+          </div>
         </div>
 
         {/* Trakt Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
-          <div className="flex items-center gap-3.5">
+        <div className={`${BENTO_CARD} flex flex-col justify-between p-5 min-h-[155px]`}>
+          <div className="flex items-start gap-3.5">
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.05)] bg-transparent">
               <svg viewBox="0 0 48 48" className="h-full w-full">
                 <defs>
@@ -218,30 +262,37 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
                 <path d="m13.62 17.97 7.92 7.92 1.47-1.47-7.92-7.92-1.47 1.47Zm14.39 14.4 1.47-1.46-2.16-2.16L47.64 8.43c-.19-.75-.46-1.46-.79-2.14L24.39 28.75l3.62 3.62Zm-15.09-13.7-1.46 1.46 14.4 14.4 1.46-1.47L23 28.75 46.35 5.4c-.36-.6-.78-1.16-1.25-1.68L21.54 27.28l-8.62-8.61Zm34.95-9.09L28.7 28.75l1.47 1.46L48 12.38v-1.12c0-.57-.04-1.14-.13-1.68ZM25.16 22.27l-7.92-7.92-1.47 1.47 7.92 7.92 1.47-1.47Zm16.16 12.85c0 3.42-2.78 6.2-6.2 6.2H12.88c-3.42 0-6.2-2.78-6.2-6.2V12.88c0-3.42 2.78-6.21 6.2-6.21h20.78V4.6H12.88c-4.56 0-8.28 3.71-8.28 8.28v22.24c0 4.56 3.71 8.28 8.28 8.28h22.24c4.56 0 8.28-3.71 8.28-8.28v-3.51h-2.07v3.51Z" fill="#fff"/>
               </svg>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Connect Trakt</p>
-              <p className="text-[11px] text-text-muted">Sync your movies and TV shows watch progress automatically.</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text-primary">
+                {traktUser ? "Trakt Connected" : "Connect Trakt"}
+              </p>
+              <p className="text-[11px] text-text-muted mt-0.5 truncate font-medium" title={traktUser ? (traktUser.name || traktUser.username) : undefined}>
+                {traktUser ? (traktUser.name || traktUser.username) : "Sync movies & TV shows history automatically."}
+              </p>
             </div>
           </div>
-          {traktUser ? (
-            <div className="flex items-center gap-2 max-md:w-full">
-              {syncTrakt && (
-                <button onClick={syncTrakt} disabled={isSyncingTrakt} className={`${BTN_PRIMARY} h-9 px-[18px] text-xs max-md:flex-1`}>
-                  {isSyncingTrakt ? "Syncing..." : "Sync Now"}
-                </button>
-              )}
-              <button onClick={disconnectTrakt} className={`${BTN_SECONDARY} h-9 px-[18px] text-xs max-md:flex-1 truncate`} title={`Disconnect (${traktUser.name || traktUser.username})`}>
-                Disconnect ({traktUser.name || traktUser.username})
-              </button>
-            </div>
-          ) : (
-            <button onClick={connectTrakt} className={`${BTN_PRIMARY} h-9 px-5 text-xs max-md:w-full`}>Connect</button>
-          )}
+          <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+            {traktUser ? (
+              <>
+                <span className="text-[10px] font-mono text-text-muted">Status: Active</span>
+                <div className="flex gap-2">
+                  {syncTrakt && (
+                    <button onClick={syncTrakt} disabled={isSyncingTrakt} className="text-xs font-semibold text-text-primary hover:underline bg-transparent border-none cursor-pointer">
+                      {isSyncingTrakt ? "Syncing..." : "Sync"}
+                    </button>
+                  )}
+                  <button onClick={disconnectTrakt} className="text-xs font-semibold text-red-500 hover:underline bg-transparent border-none cursor-pointer">Disconnect</button>
+                </div>
+              </>
+            ) : (
+              <button onClick={connectTrakt} className={`${BTN_PRIMARY} h-8 px-4 text-xs w-full`}>Connect</button>
+            )}
+          </div>
         </div>
 
         {/* Letterboxd Card */}
-        <div className={`${BENTO_CARD} flex items-center justify-between px-5 py-4 max-md:flex-col max-md:items-stretch max-md:gap-4`}>
-          <div className="flex items-center gap-3.5">
+        <div className={`${BENTO_CARD} flex flex-col justify-between p-5 min-h-[155px]`}>
+          <div className="flex items-start gap-3.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1c1b18] text-white">
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
                 <circle cx="7" cy="12" r="3.5" fill="#ff7a00" />
@@ -249,12 +300,50 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
                 <circle cx="17" cy="12" r="3.5" fill="#00b0ea" />
               </svg>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Import Letterboxd</p>
-              <p className="text-[11px] text-text-muted">Upload your Letterboxd CSV (watchlist or watched) to import your movies.</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text-primary">
+                {letterboxdUsername ? "Letterboxd Connected" : "Sync Letterboxd"}
+              </p>
+              <p className="text-[11px] text-text-muted mt-0.5 truncate font-medium" title={letterboxdUsername || undefined}>
+                {letterboxdUsername ? letterboxdUsername : "Sync Letterboxd watched diary entries via RSS feed."}
+              </p>
             </div>
           </div>
-          <button onClick={() => setShowLetterboxdModal(true)} className="h-9 cursor-pointer rounded-md border-none bg-[#00e054] px-[18px] text-xs font-semibold text-white max-md:w-full">Upload CSV</button>
+          <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+            {letterboxdUsername ? (
+              <>
+                <span className="text-[10px] font-mono text-text-muted">Status: Active</span>
+                <div className="flex gap-2">
+                  <button onClick={handleLetterboxdImport} disabled={isImportingLetterboxd} className="text-xs font-semibold text-text-primary hover:underline bg-transparent border-none cursor-pointer">
+                    {isImportingLetterboxd ? "Syncing..." : "Sync"}
+                  </button>
+                  <button onClick={disconnectLetterboxd} className="text-xs font-semibold text-red-500 hover:underline bg-transparent border-none cursor-pointer">Disconnect</button>
+                </div>
+              </>
+            ) : (
+              <button onClick={() => setShowLetterboxdModal(true)} className={`${BTN_PRIMARY} h-8 px-4 text-xs w-full`}>Connect</button>
+            )}
+          </div>
+        </div>
+
+        {/* Export CSV Card */}
+        <div className={`${BENTO_CARD} flex flex-col justify-between p-5 min-h-[155px]`}>
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-text-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Export Library</p>
+              <p className="text-[11px] text-text-muted mt-0.5">Download movie diary entries as CSV for importing.</p>
+            </div>
+          </div>
+          <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+            <button onClick={exportLetterboxdCSV} className={`${BTN_SECONDARY} h-8 px-4 text-xs w-full font-semibold`}>Export CSV</button>
+          </div>
         </div>
       </div>
 
@@ -315,56 +404,69 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
         {/* Right Column: Watchlist Bento Container */}
         <div className={`${BENTO_CARD} p-5`}>
           {/* Header Row Controls */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-3">
-            {/* Category Tabs */}
-            <div className="flex gap-1.5 rounded-lg bg-bg-secondary p-[3px]">
-              <button onClick={() => setActiveCategoryTab("all_media")} className={pillClass(activeCategoryTab === "all_media")}>
-                🎬 Movies &amp; Shows
-              </button>
-              <button onClick={() => setActiveCategoryTab("anime")} className={pillClass(activeCategoryTab === "anime")}>
-                🌸 Anime
-              </button>
+          <div className="mb-4 flex flex-col gap-3 border-b border-border-subtle pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Category Tabs */}
+              <div className="flex gap-1.5 rounded-lg bg-bg-secondary p-[3px] max-md:w-full">
+                <button onClick={() => setActiveCategoryTab("movie")} className={`${pillClass(activeCategoryTab === "movie")} max-md:flex-1 max-md:justify-center`}>
+                  🎬 Movies
+                </button>
+                <button onClick={() => setActiveCategoryTab("show")} className={`${pillClass(activeCategoryTab === "show")} max-md:flex-1 max-md:justify-center`}>
+                  📺 TV Shows
+                </button>
+                <button onClick={() => setActiveCategoryTab("anime")} className={`${pillClass(activeCategoryTab === "anime")} max-md:flex-1 max-md:justify-center`}>
+                  🌸 Anime
+                </button>
+              </div>
+
+              {/* Right side status pills */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {watchlist.some((w) => !w.coverImage && (w.type === "movie" || w.type === "show")) && enrichMissingPosters && (
+                  <button
+                    onClick={enrichMissingPosters}
+                    disabled={isEnrichingPosters}
+                    className="rounded-md border border-border-subtle bg-bg-card hover:bg-bg-secondary text-[11px] font-semibold text-text-primary px-3 py-1.5 flex items-center gap-1 cursor-pointer transition-all duration-150 disabled:opacity-50"
+                    title="Scan for items with missing cover art and fetch them from OMDb/TVMaze"
+                  >
+                    ✨ {isEnrichingPosters ? "Fetching..." : "Fetch Posters"}
+                  </button>
+                )}
+
+                <div className="flex gap-1 rounded-lg bg-bg-secondary p-[3px]">
+                  {(
+                    [
+                      { id: "all", label: "All" },
+                      { id: "watching", label: "👁️ Watching" },
+                      { id: "plan_to_watch", label: "⏳ Plan" },
+                      { id: "completed", label: "✅ Done" },
+                    ] as const
+                  ).map((st) => (
+                    <button key={st.id} onClick={() => setStatusFilter(st.id)} className={statusPillClass(statusFilter === st.id)}>
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            {/* Right side status pills & dropdown */}
+            {/* Search & sort row */}
             <div className="flex flex-wrap items-center gap-2.5">
-              {watchlist.some((w) => !w.coverImage && (w.type === "movie" || w.type === "show")) && enrichMissingPosters && (
-                <button
-                  onClick={enrichMissingPosters}
-                  disabled={isEnrichingPosters}
-                  className="rounded-md border border-border-subtle bg-bg-card hover:bg-bg-secondary text-[11px] font-semibold text-text-primary px-3 py-1.5 flex items-center gap-1 cursor-pointer transition-all duration-150 disabled:opacity-50"
-                  title="Scan for items with missing cover art and fetch them from OMDb/TVMaze"
-                >
-                  ✨ {isEnrichingPosters ? "Fetching..." : "Fetch Posters"}
-                </button>
-              )}
-
-              {activeCategoryTab === "all_media" && (
-                <select
-                  value={watchlistFilter}
-                  onChange={(e) => setWatchlistFilter(e.target.value as any)}
-                  className="cursor-pointer rounded-md border border-border-subtle bg-white px-3 py-1.5 text-[11px]"
-                >
-                  <option value="all">All Types</option>
-                  <option value="movie">Movies Only</option>
-                  <option value="show">TV Shows Only</option>
-                </select>
-              )}
-
-              <div className="flex gap-1 rounded-lg bg-bg-secondary p-[3px]">
-                {(
-                  [
-                    { id: "all", label: "All" },
-                    { id: "watching", label: "👁️ Watching" },
-                    { id: "plan_to_watch", label: "⏳ Plan" },
-                    { id: "completed", label: "✅ Done" },
-                  ] as const
-                ).map((st) => (
-                  <button key={st.id} onClick={() => setStatusFilter(st.id)} className={statusPillClass(statusFilter === st.id)}>
-                    {st.label}
-                  </button>
-                ))}
-              </div>
+              <input
+                type="text"
+                placeholder="🔍 Search by title..."
+                value={titleSearch}
+                onChange={(e) => setTitleSearch(e.target.value)}
+                className={`${INPUT_CLASS} max-w-[260px] max-md:max-w-none max-md:flex-1`}
+              />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="cursor-pointer rounded-md border border-border-subtle bg-white px-3 py-1.5 text-[11px] max-md:flex-1"
+              >
+                <option value="title">Sort: Title A–Z</option>
+                <option value="rating">Sort: Highest Rated</option>
+                <option value="year">Sort: Newest Year</option>
+              </select>
             </div>
           </div>
 

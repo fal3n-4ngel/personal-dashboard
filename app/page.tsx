@@ -16,6 +16,7 @@ import {
 import { getNextFutureBillingDate, getSalaryCycleRange } from "@/lib/dates";
 import { anilistQuery } from "@/lib/anilist";
 import { traktRequest } from "@/lib/trakt-client";
+import { pushWatchlistUpdate } from "@/lib/sync-push";
 import type { SyncEntry } from "@/lib/firebase";
 
 // Modular Dashboard Components
@@ -99,9 +100,9 @@ export default function Dashboard() {
   const [watchlistFilter, setWatchlistFilter] = useState<"all" | "anime" | "movie" | "show">("all");
   const [isEnrichingPosters, setIsEnrichingPosters] = useState(false);
 
-  // Letterboxd CSV Import Modal
+  // Letterboxd RSS Sync Modal
   const [showLetterboxdModal, setShowLetterboxdModal] = useState(false);
-  const [letterboxdCsv, setLetterboxdCsv] = useState("");
+  const [letterboxdUsername, setLetterboxdUsername] = useState("");
   const [isImportingLetterboxd, setIsImportingLetterboxd] = useState(false);
 
   // Book Library State
@@ -255,6 +256,11 @@ export default function Dashboard() {
     setTraktUser(null);
   }
 
+  function disconnectLetterboxd() {
+    localStorage.removeItem("letterboxd_username");
+    setLetterboxdUsername("");
+  }
+
   /* ─── AniList & Trakt Library Sync ─── */
   const [isSyncingAnilist, setIsSyncingAnilist] = useState(false);
   const [isSyncingTrakt, setIsSyncingTrakt] = useState(false);
@@ -367,17 +373,27 @@ export default function Dashboard() {
     setIsSyncingTrakt(true);
     try {
       const idToken = user?.idToken;
-      const movies = await traktRequest(idToken, "sync/watched/movies", { token: traktUser.accessToken });
-      const shows = await traktRequest(idToken, "sync/watched/shows", { token: traktUser.accessToken });
+      // 1. Fetch watched items
+      const watchedMovies = await traktRequest(idToken, "sync/watched/movies", { token: traktUser.accessToken }).catch(() => []);
+      const watchedShows = await traktRequest(idToken, "sync/watched/shows", { token: traktUser.accessToken }).catch(() => []);
+
+      // 2. Fetch watchlist (plan to watch) items
+      const watchlistMovies = await traktRequest(idToken, "sync/watchlist/movies", { token: traktUser.accessToken }).catch(() => []);
+      const watchlistShows = await traktRequest(idToken, "sync/watchlist/shows", { token: traktUser.accessToken }).catch(() => []);
 
       const entries: SyncEntry[] = [];
+      const processedTraktIds = new Set<number>();
 
-      if (Array.isArray(movies)) {
-        for (const item of movies) {
+      // Process watched movies
+      if (Array.isArray(watchedMovies)) {
+        for (const item of watchedMovies) {
           if (!item?.movie) continue;
+          const traktId = item.movie.ids?.trakt;
+          if (traktId) processedTraktIds.add(Number(traktId));
+
           const existing = watchlist.find(
             (w) =>
-              (w.traktId && w.traktId === item.movie.ids?.trakt) ||
+              (w.traktId && w.traktId === traktId) ||
               (w.title.toLowerCase().trim() === item.movie.title.toLowerCase().trim() && w.type === "movie")
           );
 
@@ -395,14 +411,50 @@ export default function Dashboard() {
             rating: item.rating ? Number(item.rating) : null,
             coverImage,
             year: item.movie.year || null,
-            traktId: item.movie.ids?.trakt,
+            traktId,
           });
         }
       }
 
-      if (Array.isArray(shows)) {
-        for (const item of shows) {
+      // Process watchlist movies
+      if (Array.isArray(watchlistMovies)) {
+        for (const item of watchlistMovies) {
+          if (!item?.movie) continue;
+          const traktId = item.movie.ids?.trakt;
+          if (traktId && processedTraktIds.has(Number(traktId))) continue;
+          if (traktId) processedTraktIds.add(Number(traktId));
+
+          const existing = watchlist.find(
+            (w) =>
+              (w.traktId && w.traktId === traktId) ||
+              (w.title.toLowerCase().trim() === item.movie.title.toLowerCase().trim() && w.type === "movie")
+          );
+
+          let coverImage = existing?.coverImage || null;
+          if (!coverImage && item.movie.ids?.imdb) {
+            coverImage = await fetchOMDbPoster(item.movie.ids.imdb);
+          }
+
+          entries.push({
+            title: item.movie.title,
+            type: "movie",
+            status: "plan_to_watch",
+            progress: 0,
+            totalEpisodes: 1,
+            rating: item.rating ? Number(item.rating) : null,
+            coverImage,
+            year: item.movie.year || null,
+            traktId,
+          });
+        }
+      }
+
+      // Process watched shows
+      if (Array.isArray(watchedShows)) {
+        for (const item of watchedShows) {
           if (!item?.show) continue;
+          const traktId = item.show.ids?.trakt;
+          if (traktId) processedTraktIds.add(Number(traktId));
           
           let progress = 0;
           if (Array.isArray(item.seasons)) {
@@ -418,7 +470,7 @@ export default function Dashboard() {
 
           const existing = watchlist.find(
             (w) =>
-              (w.traktId && w.traktId === item.show.ids?.trakt) ||
+              (w.traktId && w.traktId === traktId) ||
               (w.title.toLowerCase().trim() === item.show.title.toLowerCase().trim() && w.type === "show")
           );
 
@@ -454,7 +506,51 @@ export default function Dashboard() {
             rating: item.rating ? Number(item.rating) : null,
             coverImage,
             year: item.show.year || null,
-            traktId: item.show.ids?.trakt,
+            traktId,
+          });
+        }
+      }
+
+      // Process watchlist shows
+      if (Array.isArray(watchlistShows)) {
+        for (const item of watchlistShows) {
+          if (!item?.show) continue;
+          const traktId = item.show.ids?.trakt;
+          if (traktId && processedTraktIds.has(Number(traktId))) continue;
+          if (traktId) processedTraktIds.add(Number(traktId));
+
+          const existing = watchlist.find(
+            (w) =>
+              (w.traktId && w.traktId === traktId) ||
+              (w.title.toLowerCase().trim() === item.show.title.toLowerCase().trim() && w.type === "show")
+          );
+
+          let coverImage = existing?.coverImage || null;
+          if (!coverImage && item.show.ids?.imdb) {
+            coverImage = await fetchOMDbPoster(item.show.ids.imdb);
+          }
+          if (!coverImage && item.show.ids?.imdb) {
+            try {
+              const tvmazeRes = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${item.show.ids.imdb}`);
+              if (tvmazeRes.ok) {
+                const tvmazeData = await tvmazeRes.json();
+                coverImage = tvmazeData.image?.medium || null;
+              }
+            } catch (err) {
+              console.error("TVMaze fallback error:", err);
+            }
+          }
+
+          entries.push({
+            title: item.show.title,
+            type: "show",
+            status: "plan_to_watch",
+            progress: 0,
+            totalEpisodes: existing?.totalEpisodes || null,
+            rating: item.rating ? Number(item.rating) : null,
+            coverImage,
+            year: item.show.year || null,
+            traktId,
           });
         }
       }
@@ -689,6 +785,9 @@ export default function Dashboard() {
     const trAcc = localStorage.getItem("trakt_access_token");
     const trRef = localStorage.getItem("trakt_refresh_token");
     if (trAcc && trRef) loadTraktUser(trAcc, trRef, user.idToken);
+
+    const lbUser = localStorage.getItem("letterboxd_username");
+    if (lbUser) setLetterboxdUsername(lbUser);
   }, [user]);
 
   /* ─── API Fetchers ─── */
@@ -897,6 +996,7 @@ export default function Dashboard() {
     });
     if (res.ok) {
       setWatchlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, ...nextUpdates, updatedAt: Date.now() } : w)));
+      pushWatchlistUpdate(user?.idToken, item, nextUpdates).catch((err) => console.error(err));
     }
   };
 
@@ -989,77 +1089,48 @@ export default function Dashboard() {
       headers: getHeaders(),
       body: JSON.stringify(body),
     });
-    if (apiRes.ok) fetchWatchlist();
+    if (apiRes.ok) {
+      fetchWatchlist();
+      const createdItem = { ...body, id: "" } as WatchlistItem;
+      pushWatchlistUpdate(user?.idToken, createdItem, { status: "plan_to_watch" }).catch((e) => console.error(e));
+    }
   };
 
   const handleLetterboxdImport = async () => {
-    if (!letterboxdCsv.trim()) return;
+    if (!letterboxdUsername.trim()) return;
     setIsImportingLetterboxd(true);
     try {
-      const lines = letterboxdCsv.trim().split("\n");
-      if (lines.length < 2) throw new Error("Invalid CSV format");
-
-      const headerLine = lines[0].toLowerCase();
-      const headers = headerLine.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g)?.map((s) => s.replace(/(^"|"$)/g, "")) || [];
-      const nameIdx = headers.findIndex((col) => col.includes("name"));
-      const yearIdx = headers.findIndex((col) => col.includes("year"));
-      if (nameIdx === -1) throw new Error("Could not find 'Name' column in CSV");
-
-      const newItems: Omit<WatchlistItem, "id">[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const arr: string[] = [];
-        let quote = false;
-        let cell = "";
-        const str = lines[i];
-        for (let c = 0; c < str.length; c++) {
-          const char = str[c];
-          if (char === '"' && str[c + 1] === '"') {
-            cell += '"';
-            c++;
-          } else if (char === '"') {
-            quote = !quote;
-          } else if (char === "," && !quote) {
-            arr.push(cell.trim());
-            cell = "";
-          } else {
-            cell += char;
-          }
-        }
-        arr.push(cell.trim());
-
-        if (!arr[nameIdx]) continue;
-        const title = arr[nameIdx].replace(/(^"|"$)/g, "");
-        const year = yearIdx !== -1 && arr[yearIdx] ? parseInt(arr[yearIdx], 10) || null : null;
-
-        newItems.push({
-          title,
-          type: "movie",
-          status: "plan_to_watch",
-          progress: 0,
-          totalEpisodes: null,
-          rating: null,
-          coverImage: null,
-          year,
-          updatedAt: Date.now(),
-        });
+      const res = await fetch(`/api/watchlist/letterboxd?username=${encodeURIComponent(letterboxdUsername.trim())}`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Failed to fetch Letterboxd RSS feed.");
       }
 
-      if (newItems.length === 0) throw new Error("No valid movies found in CSV");
+      const { movies } = await res.json();
+      if (!movies || movies.length === 0) {
+        throw new Error("No recent watched diary entries found in this Letterboxd feed.");
+      }
 
-      triggerConfirm("Import Movies", `Found ${newItems.length} movies. Import them into your watchlist?`, async () => {
+      triggerConfirm("Sync Letterboxd", `Found ${movies.length} movies in your Letterboxd RSS feed. Sync them now?`, async () => {
         const syncRes = await fetch("/api/watchlist/sync", {
           method: "POST",
           headers: getHeaders(),
-          body: JSON.stringify({ items: newItems }),
+          body: JSON.stringify({ source: "letterboxd", entries: movies }),
         });
         if (syncRes.ok) {
+          const result = await syncRes.json();
           setShowLetterboxdModal(false);
-          setLetterboxdCsv("");
+          localStorage.setItem("letterboxd_username", letterboxdUsername.trim());
           fetchWatchlist();
+          triggerAlert("Letterboxd Sync Complete", `Successfully synced ${result.added || 0} new and ${result.updated || 0} updated movies!`, "success");
+        } else {
+          throw new Error("Server rejected sync payload.");
         }
-      }, false, "Import");
-    } catch (err) {
-      triggerAlert("Import Failed", err instanceof Error ? err.message : "Failed to parse CSV", "danger");
+      }, false, "Sync");
+    } catch (err: any) {
+      triggerAlert("Sync Failed", err?.message || "Failed to parse RSS feed", "danger");
     } finally {
       setIsImportingLetterboxd(false);
     }
@@ -1378,6 +1449,11 @@ const updateMarketPrices = async () => {
         disconnectTrakt={disconnectTrakt}
         syncTrakt={syncTrakt}
         isSyncingTrakt={isSyncingTrakt}
+        letterboxdUsername={letterboxdUsername || null}
+        connectLetterboxd={() => setShowLetterboxdModal(true)}
+        disconnectLetterboxd={disconnectLetterboxd}
+        syncLetterboxd={handleLetterboxdImport}
+        isSyncingLetterboxd={isImportingLetterboxd}
         showInvestmentsTab={showInvestmentsTab}
         setShowOnboarding={setShowOnboarding}
         triggerConfirm={triggerConfirm}
@@ -1482,10 +1558,11 @@ const updateMarketPrices = async () => {
             isFetchingWatchlist={isFetchingWatchlist}
             showLetterboxdModal={showLetterboxdModal}
             setShowLetterboxdModal={setShowLetterboxdModal}
-            letterboxdCsv={letterboxdCsv}
-            setLetterboxdCsv={setLetterboxdCsv}
+            letterboxdUsername={letterboxdUsername}
+            setLetterboxdUsername={setLetterboxdUsername}
             handleLetterboxdImport={handleLetterboxdImport}
             isImportingLetterboxd={isImportingLetterboxd}
+            disconnectLetterboxd={disconnectLetterboxd}
             anilistUser={anilistUser}
             connectAnilist={connectAnilist}
             disconnectAnilist={disconnectAnilist}
@@ -1576,22 +1653,20 @@ const updateMarketPrices = async () => {
       {/* Letterboxd Import Modal */}
       {showLetterboxdModal && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="flex w-[450px] flex-col gap-4 rounded-card border border-border-subtle bg-white p-6 shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_10px_10px_-5px_rgba(0,0,0,0.04)]">
+          <div className="flex w-[400px] flex-col gap-4 rounded-card border border-border-subtle bg-white p-6 shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_10px_10px_-5px_rgba(0,0,0,0.04)]">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-xs font-semibold tracking-[0.8px] text-text-secondary uppercase">Import Letterboxd CSV</span>
+              <span className="font-mono text-xs font-semibold tracking-[0.8px] text-text-secondary uppercase">Sync Letterboxd RSS</span>
               <button onClick={() => setShowLetterboxdModal(false)} className="cursor-pointer border-none bg-transparent p-1 text-base">✕</button>
             </div>
             <p className="text-xs leading-[1.4] text-text-muted">
-              Paste the contents of your Letterboxd <code>watchlist.csv</code> or <code>watched.csv</code> file below. We will parse it and add the movies to your library automatically.
+              Enter your Letterboxd username to fetch and sync your recent watched diary entries from your public RSS feed.
             </p>
-            <textarea
-              rows={8}
-              placeholder={`Date,Name,Year,Letterboxd URI
-2026-07-22,Interstellar,2014,https://boxd.it/...
-2026-07-22,The Prestige,2006,https://boxd.it/...`}
-              value={letterboxdCsv}
-              onChange={(e) => setLetterboxdCsv(e.target.value)}
-              className="w-full resize-y rounded-md border border-border-subtle bg-bg-primary p-2.5 font-mono text-[11px] outline-none"
+            <input
+              type="text"
+              placeholder="Username (e.g. fal3n4ngel)"
+              value={letterboxdUsername}
+              onChange={(e) => setLetterboxdUsername(e.target.value)}
+              className="w-full rounded-md border border-border-subtle bg-bg-primary px-3 py-2 text-[13px] text-text-primary outline-none transition-all duration-200 focus:border-border-hover focus:shadow-focus"
             />
             <div className="flex justify-end gap-2.5">
               <button onClick={() => setShowLetterboxdModal(false)} className="h-9 cursor-pointer rounded-md border border-border-subtle bg-transparent px-4 text-xs font-medium text-text-primary transition-all duration-200 hover:bg-bg-primary">
@@ -1599,10 +1674,10 @@ const updateMarketPrices = async () => {
               </button>
               <button
                 onClick={handleLetterboxdImport}
-                disabled={isImportingLetterboxd || !letterboxdCsv.trim()}
+                disabled={isImportingLetterboxd || !letterboxdUsername.trim()}
                 className="h-9 cursor-pointer rounded-md border border-text-primary bg-text-primary px-5 text-xs font-medium text-white transition-all duration-200 hover:border-[#2e2d27] hover:bg-[#2e2d27] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isImportingLetterboxd ? "Importing..." : "Import Movies"}
+                {isImportingLetterboxd ? "Syncing..." : "Sync Feed"}
               </button>
             </div>
           </div>

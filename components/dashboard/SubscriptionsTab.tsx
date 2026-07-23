@@ -96,16 +96,31 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
       {/* Add Form */}
       <div className={BENTO_CARD}>
         <span className={`${LABEL_MONO} mb-3.5 block`}>Add Subscription</span>
-        <form onSubmit={addSubscription} className="grid grid-cols-[1fr_70px_1fr_1fr_1fr_auto] items-end gap-[9px]">
-          <input type="text" placeholder="Name (e.g. Netflix)" value={subName} onChange={(e) => setSubName(e.target.value)} required className={INPUT_CLASS} />
-          <input type="text" placeholder="🍿" value={subIcon} onChange={(e) => setSubIcon(e.target.value)} className={`${INPUT_CLASS} text-center`} />
-          <input type="number" placeholder={`Amount (${currency})`} value={subCost} onChange={(e) => setSubCost(e.target.value)} required step="0.01" className={INPUT_CLASS} />
-          <select value={subCycle} onChange={(e) => setSubCycle(e.target.value as "monthly" | "yearly")} className={`${INPUT_CLASS} cursor-pointer`}>
-            <option value="monthly">Monthly</option>
-            <option value="yearly">Yearly</option>
-          </select>
-          <input type="date" value={subNextDate} onChange={(e) => setSubNextDate(e.target.value)} required className={INPUT_CLASS} />
-          <button type="submit" disabled={isAddingSub} className={`${BTN_PRIMARY} whitespace-nowrap`}>
+        <form onSubmit={addSubscription} className="grid grid-cols-2 gap-[9px] md:grid-cols-[1fr_70px_1fr_1fr_1fr_auto] items-end">
+          <div className="col-span-2 md:col-span-1 flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold text-text-secondary uppercase md:hidden">Name</span>
+            <input type="text" placeholder="Name (e.g. Netflix)" value={subName} onChange={(e) => setSubName(e.target.value)} required className={`${INPUT_CLASS} w-full`} />
+          </div>
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold text-text-secondary uppercase md:hidden">Icon</span>
+            <input type="text" placeholder="🍿" value={subIcon} onChange={(e) => setSubIcon(e.target.value)} className={`${INPUT_CLASS} text-center w-full`} />
+          </div>
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold text-text-secondary uppercase md:hidden">Amount</span>
+            <input type="number" placeholder={`Amount (${currency})`} value={subCost} onChange={(e) => setSubCost(e.target.value)} required step="0.01" className={`${INPUT_CLASS} w-full`} />
+          </div>
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold text-text-secondary uppercase md:hidden">Cycle</span>
+            <select value={subCycle} onChange={(e) => setSubCycle(e.target.value as "monthly" | "yearly")} className={`${INPUT_CLASS} cursor-pointer w-full`}>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-1.5">
+            <span className="text-[10px] font-semibold text-text-secondary uppercase md:hidden">Next Due</span>
+            <input type="date" value={subNextDate} onChange={(e) => setSubNextDate(e.target.value)} required className={`${INPUT_CLASS} w-full`} />
+          </div>
+          <button type="submit" disabled={isAddingSub} className={`${BTN_PRIMARY} col-span-2 md:col-span-1 whitespace-nowrap w-full`}>
             {isAddingSub ? "Adding..." : "+ Add"}
           </button>
         </form>

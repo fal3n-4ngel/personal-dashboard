@@ -15,6 +15,11 @@ interface SidebarProps {
   disconnectTrakt: () => void;
   syncTrakt?: () => void;
   isSyncingTrakt?: boolean;
+  letterboxdUsername: string | null;
+  connectLetterboxd: () => void;
+  disconnectLetterboxd: () => void;
+  syncLetterboxd?: () => void;
+  isSyncingLetterboxd?: boolean;
   showInvestmentsTab: boolean;
   setShowOnboarding: (show: boolean) => void;
   triggerConfirm: (
@@ -54,6 +59,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   disconnectTrakt,
   syncTrakt,
   isSyncingTrakt,
+  letterboxdUsername,
+  connectLetterboxd,
+  disconnectLetterboxd,
+  syncLetterboxd,
+  isSyncingLetterboxd,
   showInvestmentsTab,
   setShowOnboarding,
   triggerConfirm,
@@ -187,6 +197,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <path d="m13.62 17.97 7.92 7.92 1.47-1.47-7.92-7.92-1.47 1.47Zm14.39 14.4 1.47-1.46-2.16-2.16L47.64 8.43c-.19-.75-.46-1.46-.79-2.14L24.39 28.75l3.62 3.62Zm-15.09-13.7-1.46 1.46 14.4 14.4 1.46-1.47L23 28.75 46.35 5.4c-.36-.6-.78-1.16-1.25-1.68L21.54 27.28l-8.62-8.61Zm34.95-9.09L28.7 28.75l1.47 1.46L48 12.38v-1.12c0-.57-.04-1.14-.13-1.68ZM25.16 22.27l-7.92-7.92-1.47 1.47 7.92 7.92 1.47-1.47Zm16.16 12.85c0 3.42-2.78 6.2-6.2 6.2H12.88c-3.42 0-6.2-2.78-6.2-6.2V12.88c0-3.42 2.78-6.21 6.2-6.21h20.78V4.6H12.88c-4.56 0-8.28 3.71-8.28 8.28v22.24c0 4.56 3.71 8.28 8.28 8.28h22.24c4.56 0 8.28-3.71 8.28-8.28v-3.51h-2.07v3.51Z" fill="#fff"/>
               </svg>
               Connect Trakt
+            </button>
+          )}
+
+          {letterboxdUsername ? (
+            <div className="mb-1 flex cursor-default items-center justify-between gap-3 rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-text-secondary transition-all duration-200 hover:bg-bg-primary hover:text-text-primary">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#1c1b18] text-white">
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                    <circle cx="7" cy="12" r="3.5" fill="#ff7a00" />
+                    <circle cx="12" cy="12" r="3.5" fill="#00e054" />
+                    <circle cx="17" cy="12" r="3.5" fill="#00b0ea" />
+                  </svg>
+                </span>
+                <div className="overflow-hidden">
+                  <p className="text-[11px] font-semibold">Letterboxd</p>
+                  <p className="overflow-hidden text-ellipsis text-[9px] text-text-muted">{letterboxdUsername}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                {syncLetterboxd && (
+                  <button onClick={syncLetterboxd} disabled={isSyncingLetterboxd} title="Sync Letterboxd Feed" className={`${sidebarActionBtnClass} p-1`}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSyncingLetterboxd ? "animate-spin" : ""}>
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                    </svg>
+                  </button>
+                )}
+                <button onClick={disconnectLetterboxd} title="Disconnect Letterboxd" className={`${sidebarActionBtnClass} p-1`}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={connectLetterboxd} className={`${navLinkClass(false)} w-full border-none bg-transparent text-left`}>
+              <span className="mr-2.5 inline-flex h-[13px] w-[13px] items-center justify-center rounded-full bg-[#1c1b18]">
+                <svg className="h-[9px] w-[9px]" viewBox="0 0 24 24" fill="none">
+                  <circle cx="7" cy="12" r="3.5" fill="#ff7a00" />
+                  <circle cx="12" cy="12" r="3.5" fill="#00e054" />
+                  <circle cx="17" cy="12" r="3.5" fill="#00b0ea" />
+                </svg>
+              </span>
+              Connect Letterboxd
             </button>
           )}
         </div>
