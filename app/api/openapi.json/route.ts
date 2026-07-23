@@ -137,6 +137,7 @@ export async function GET() {
             "Supports filtering by type or status, plus pagination (limit/offset) to prevent large payloads.",
           "x-openai-isConsequential": false,
           parameters: [
+            { name: "q", in: "query", required: false, description: "Free-text search query to filter watchlist items by title (partial matching)", schema: { type: "string" } },
             { name: "type", in: "query", required: false, description: "Filter by media type: 'movie', 'show', 'anime', or 'book'", schema: { type: "string", enum: ["movie", "show", "anime", "book"] } },
             { name: "status", in: "query", required: false, description: "Filter by status: 'watching', 'plan_to_watch', 'completed', or 'dropped'", schema: { type: "string", enum: ["watching", "plan_to_watch", "completed", "dropped"] } },
             { name: "limit", in: "query", required: false, description: "Maximum number of items to return (default 50)", schema: { type: "integer", default: 50 } },

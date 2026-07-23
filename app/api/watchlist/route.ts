@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
 
     const type = req.nextUrl.searchParams.get("type");
     const status = req.nextUrl.searchParams.get("status");
+    const q = req.nextUrl.searchParams.get("q");
     const limitParam = req.nextUrl.searchParams.get("limit");
     const offsetParam = req.nextUrl.searchParams.get("offset");
 
@@ -21,6 +22,10 @@ export async function GET(req: NextRequest) {
     }
     if (status) {
       items = items.filter((i) => i.status.toLowerCase() === status.toLowerCase());
+    }
+    if (q) {
+      const qLower = q.toLowerCase();
+      items = items.filter((i) => i.title.toLowerCase().includes(qLower));
     }
 
     const total = items.length;
