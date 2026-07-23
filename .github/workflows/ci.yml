@@ -22,6 +22,12 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+        env:
+          # eslint-config-next/typescript does type-aware linting, which
+          # builds a full TS program graph and can exceed Node's default
+          # ~4GB old-space heap ceiling on this codebase — well within the
+          # ubuntu-latest runner's 7GB RAM, so just raise the ceiling.
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Run build
         run: npm run build
