@@ -60,15 +60,28 @@ export const BooksTab: React.FC<BooksTabProps> = ({
   isEnrichingBookCovers = false,
   onItemClick,
 }) => {
+  const [titleSearch, setTitleSearch] = React.useState("");
+  const [sortBy, setSortBy] = React.useState<"title" | "year_new" | "year_old">("title");
+
   const books = watchlist.filter((item) => item.type === "book");
 
-  const filteredBooks = books.filter((item) => {
-    if (bookFilter === "all") return true;
-    if (bookFilter === "reading") return item.status === "watching";
-    if (bookFilter === "to_read") return item.status === "plan_to_watch";
-    if (bookFilter === "completed") return item.status === "completed";
-    return true;
-  });
+  const filteredBooks = books
+    .filter((item) => {
+      if (bookFilter === "all") return true;
+      if (bookFilter === "reading") return item.status === "watching";
+      if (bookFilter === "to_read") return item.status === "plan_to_watch";
+      if (bookFilter === "completed") return item.status === "completed";
+      return true;
+    })
+    .filter((item) => {
+      if (!titleSearch.trim()) return true;
+      return item.title.toLowerCase().includes(titleSearch.trim().toLowerCase());
+    })
+    .sort((a, b) => {
+      if (sortBy === "year_new") return (b.year || 0) - (a.year || 0);
+      if (sortBy === "year_old") return (a.year || 0) - (b.year || 0);
+      return a.title.localeCompare(b.title);
+    });
 
   const readingCount = books.filter((i) => i.status === "watching").length;
   const toReadCount = books.filter((i) => i.status === "plan_to_watch").length;
@@ -157,7 +170,7 @@ export const BooksTab: React.FC<BooksTabProps> = ({
 
       {/* Your Library Section */}
       <div>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-serif text-lg font-bold tracking-tight text-text-primary">Your Library</h2>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -192,6 +205,31 @@ export const BooksTab: React.FC<BooksTabProps> = ({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Search & sort row */}
+        <div className="mb-5 flex flex-wrap items-center gap-2.5">
+          <div className="relative max-w-[260px] flex-1 max-md:max-w-none">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-text-muted">
+              <Search className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </span>
+            <input
+              type="text"
+              placeholder="Search your library by title..."
+              value={titleSearch}
+              onChange={(e) => setTitleSearch(e.target.value)}
+              className={`${INPUT_CLASS} w-full pl-8`}
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="cursor-pointer rounded-md border border-border-subtle bg-white px-3 py-1.5 text-[11px] max-md:flex-1"
+          >
+            <option value="title">Sort: Title A–Z</option>
+            <option value="year_new">Sort: Newest Year</option>
+            <option value="year_old">Sort: Oldest Year</option>
+          </select>
         </div>
 
         {/* Book Covers Grid */}
