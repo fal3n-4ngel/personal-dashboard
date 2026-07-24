@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { listWatchlist, getDailyRecommendations, saveDailyRecommendation, DailyRecommendation } from "@/lib/firebase";
+import { listWatchlist, getDailyRecommendation, saveDailyRecommendation, DailyRecommendation } from "@/lib/firebase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ApiError, toErrorResponse } from "@/lib/errors";
 
@@ -31,9 +31,9 @@ export async function GET(req: NextRequest) {
     const key = `${type}_${dateStr}`;
 
     // 1. Check if recommendation is already generated in Firestore
-    const currentRecs = await getDailyRecommendations(session);
-    if (currentRecs[key]) {
-      return NextResponse.json({ recommendation: currentRecs[key] });
+    const currentRec = await getDailyRecommendation(session, type, dateStr);
+    if (currentRec) {
+      return NextResponse.json({ recommendation: currentRec });
     }
 
     // 2. Fallback: Generate on-the-fly if not present (e.g. cron missed it)
@@ -169,7 +169,7 @@ Return no other text, comments or markdown blocks. Just the raw JSON object.
     };
 
     // Save to Firestore so it's cached for future loads
-    await saveDailyRecommendation(session, key, payload);
+    await saveDailyRecommendation(session, type, dateStr, payload);
 
     return NextResponse.json({ recommendation: payload });
   } catch (error) {
@@ -188,15 +188,14 @@ export async function POST(req: NextRequest) {
       throw new ApiError(400, "Missing type or date parameters.");
     }
 
-    const key = `${type}_${date}`;
-    const currentRecs = await getDailyRecommendations(session);
+    const currentRec = await getDailyRecommendation(session, type, date);
 
-    if (!currentRecs[key]) {
+    if (!currentRec) {
       throw new ApiError(404, "Recommendation not found.");
     }
 
-    currentRecs[key].isLogged = !!isLogged;
-    await saveDailyRecommendation(session, key, currentRecs[key]);
+    currentRec.isLogged = !!isLogged;
+    await saveDailyRecommendation(session, type, date, currentRec);
 
     return NextResponse.json({ success: true });
   } catch (error) {
