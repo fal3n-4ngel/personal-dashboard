@@ -63,6 +63,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Single recommendations doc per user, keyed by uid.
+    match /recommendations/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
     // Everything else is denied.
     match /{document=**} {
       allow read, write: if false;

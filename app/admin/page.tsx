@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FirebaseUser } from "@/types";
-import { Shield, Trash2, Bell, Mail, RefreshCw, BarChart2, ArrowLeft } from "lucide-react";
+import { Shield, Trash2, Bell, Mail, RefreshCw, BarChart2, ArrowLeft, Sparkles } from "lucide-react";
 
 interface FirebaseAuthModule {
   auth: any;
@@ -424,6 +424,12 @@ export default function AdminPage() {
                   title: "Trigger Daily Portfolio Wrap",
                   desc: "Calculates current valuations and emails portfolio Net P&L (5:30 IST close).",
                   icon: <Mail className="h-4 w-4" />,
+                },
+                {
+                  id: "recommendations",
+                  title: "Trigger Daily AI Recommendations",
+                  desc: "Generates and enriches daily suggestions for movies, shows, anime, and books.",
+                  icon: <Sparkles className="h-4 w-4" />,
                 },
               ].map((task) => (
                 <div key={task.id} className="flex justify-between items-center gap-4 rounded-lg border border-border-subtle bg-bg-primary/30 p-3.5 hover:border-border-hover transition-colors">

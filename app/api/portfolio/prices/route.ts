@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 interface CacheEntry {
   priceUsd: number;
   priceInr: number;
+  previousCloseInr: number | null;
+  previousCloseUsd: number | null;
   timestamp: number;
 }
 const priceCache: Record<string, CacheEntry> = {};
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
             currentPrice: cached.priceInr,
             currentPriceUsd: cached.priceUsd,
             currentPriceInr: cached.priceInr,
+            previousClose: cached.previousCloseInr,
             isFromCache: true
           };
         }
@@ -78,6 +81,8 @@ export async function POST(req: NextRequest) {
         priceCache[cacheKey] = {
           priceUsd: priceInfo.priceUsd,
           priceInr: priceInfo.priceInr,
+          previousCloseInr: priceInfo.previousCloseInr,
+          previousCloseUsd: priceInfo.previousCloseUsd,
           timestamp: now
         };
         return {
@@ -85,10 +90,11 @@ export async function POST(req: NextRequest) {
           currentPrice: priceInfo.priceInr,
           currentPriceUsd: priceInfo.priceUsd,
           currentPriceInr: priceInfo.priceInr,
+          previousClose: priceInfo.previousCloseInr,
           isFromCache: false
         };
       }
-      
+
       // Fallback if APIs fail or not supported, check if old cache exists first
       const cached = priceCache[cacheKey];
       if (cached) {
@@ -97,10 +103,11 @@ export async function POST(req: NextRequest) {
           currentPrice: cached.priceInr,
           currentPriceUsd: cached.priceUsd,
           currentPriceInr: cached.priceInr,
+          previousClose: cached.previousCloseInr,
           isFromCache: true
         };
       }
-      
+
       return asset;
     }));
 

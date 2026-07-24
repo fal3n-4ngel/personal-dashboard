@@ -19,6 +19,7 @@ interface BooksTabProps {
   enrichMissingBookCovers?: () => void;
   isEnrichingBookCovers?: boolean;
   onItemClick: (item: WatchlistItem) => void;
+  idToken?: string;
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle relative overflow-hidden transition-all duration-200 hover:shadow-hover hover:-translate-y-0.5";
@@ -60,9 +61,120 @@ export const BooksTab: React.FC<BooksTabProps> = ({
   enrichMissingBookCovers,
   isEnrichingBookCovers = false,
   onItemClick,
+  idToken,
 }) => {
   const [titleSearch, setTitleSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState<"title" | "year_new" | "year_old">("title");
+
+  interface AIBookRecommendation {
+    title: string;
+    author: string;
+    releaseYear?: string;
+    rationale: string;
+    synopsis: string;
+    coverImage?: string | null;
+    score?: string | null;
+    date: string;
+    isLogged?: boolean;
+  }
+
+  const [rec, setRec] = React.useState<AIBookRecommendation | null>(null);
+  const [recLoading, setRecLoading] = React.useState(false);
+  const [recError, setRecError] = React.useState<string | null>(null);
+  const [isLogged, setIsLogged] = React.useState(false);
+  const [ratingInput, setRatingInput] = React.useState<string>("8");
+  const [showRatingSelector, setShowRatingSelector] = React.useState(false);
+  const [logActionLoading, setLogActionLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!idToken) return;
+
+    setRec(null);
+    setIsLogged(false);
+    setRecLoading(true);
+    setRecError(null);
+    setShowRatingSelector(false);
+
+    fetch("/api/assistant/recommendations?type=book", {
+      headers: {
+        authorization: `Bearer ${idToken}`,
+      },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load recommendation.");
+        return res.json();
+      })
+      .then((data) => {
+        const recommendation = data.recommendation || null;
+        if (recommendation) {
+          setRec(recommendation);
+          setIsLogged(recommendation.isLogged || false);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        setRecError(err.message || "Failed to fetch suggestion.");
+      })
+      .finally(() => {
+        setRecLoading(false);
+      });
+  }, [idToken]);
+
+  const logRecommendation = async (status: "completed" | "dropped") => {
+    if (!rec) return;
+    setLogActionLoading(true);
+    try {
+      const score = status === "completed" ? parseInt(ratingInput, 10) : null;
+      const body = {
+        title: rec.title,
+        type: "book",
+        status: status,
+        progress: 0,
+        totalEpisodes: null,
+        rating: score,
+        coverImage: rec.coverImage || null,
+        year: rec.releaseYear ? parseInt(rec.releaseYear, 10) : null,
+        notes: `Author: ${rec.author}`,
+      };
+
+      const apiRes = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!apiRes.ok) {
+        throw new Error("Failed to log recommendation.");
+      }
+
+      // Mark as logged in Firestore recommendations cache document
+      await fetch("/api/assistant/recommendations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          type: "book",
+          date: rec.date,
+          isLogged: true,
+        }),
+      });
+
+      setIsLogged(true);
+      setShowRatingSelector(false);
+
+      window.dispatchEvent(new Event("watchlist-updated"));
+    } catch (err: any) {
+      console.error(err);
+      setRecError(err.message || "Failed to save recommendation.");
+    } finally {
+      setLogActionLoading(false);
+    }
+  };
 
   const books = watchlist.filter((item) => item.type === "book");
 
@@ -116,61 +228,179 @@ export const BooksTab: React.FC<BooksTabProps> = ({
         </div>
       </div>
 
-      {/* Search Google Books Card */}
-      <div className="rounded-card border border-border-subtle bg-bg-card p-6 shadow-subtle">
-        <span className={`${LABEL_MONO} mb-4 block`}>Search Google Books</span>
-        <form onSubmit={searchBooks} className="flex gap-3">
-          <div className="relative flex-1">
-            <span className="absolute inset-y-0 left-3 flex items-center text-text-muted pointer-events-none">
-              <Search className="h-4 w-4" strokeWidth={2.5} />
-            </span>
-            <input
-              type="text"
-              placeholder="Search for books by title, author..."
-              value={bookQuery}
-              onChange={(e) => setBookQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-border-subtle bg-bg-card text-[13px] text-text-primary outline-none transition-all duration-200 focus:border-border-hover focus:shadow-focus"
-              required
-            />
-          </div>
-          <button type="submit" disabled={isSearchingBooks} className={`${BTN_PRIMARY} px-6 py-2`}>
-            {isSearchingBooks ? "Searching..." : "Search"}
-          </button>
-        </form>
+      {/* Main 2-Column Section */}
+      <div className="grid grid-cols-[260px_minmax(0,1fr)] items-start gap-5 max-md:grid-cols-1">
+        {/* Left Column wrapper */}
+        <div className="flex flex-col gap-5">
+          {/* Search Google Books Card */}
+          <div className="rounded-card border border-border-subtle bg-bg-card p-4.5 shadow-subtle flex flex-col gap-3">
+            <span className={`${LABEL_MONO} mb-1 block`}>Search Google Books</span>
+            <p className="mb-3.5 text-[11px] text-text-muted">Google Books API search</p>
+            <form onSubmit={searchBooks} className="flex flex-col gap-2.5">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-text-muted pointer-events-none">
+                  <Search className="h-4 w-4" strokeWidth={2.5} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search books..."
+                  value={bookQuery}
+                  onChange={(e) => setBookQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-border-subtle bg-bg-card text-[13px] text-text-primary outline-none transition-all duration-200 focus:border-border-hover focus:shadow-focus"
+                  required
+                />
+              </div>
+              <button type="submit" disabled={isSearchingBooks} className={`${BTN_PRIMARY} w-full py-2.5`}>
+                {isSearchingBooks ? "Searching..." : "Search"}
+              </button>
+            </form>
 
-        {/* Search Results */}
-        {bookResults.length > 0 && (
-          <div className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-            {bookResults.map((res, i) => (
-              <div key={i} className="group flex items-center gap-3 rounded-lg border border-border-subtle bg-bg-primary p-3 transition-all duration-200 hover:bg-bg-secondary/40 hover:border-border-hover">
-                <div className="relative shrink-0 shadow-sm rounded overflow-hidden h-14 w-10 bg-bg-secondary flex items-center justify-center">
-                  {isSafeImageUrl(res.coverImage) ? (
-                    <>
-                      <img src={res.coverImage} alt={res.title} className="h-full w-full object-cover" />
-                      <div className="absolute inset-y-0 left-0 w-1.5 bg-linear-to-r from-black/25 via-black/10 to-transparent pointer-events-none" />
-                    </>
-                  ) : (
-                    <span className="text-lg">📚</span>
+            {/* Search Results */}
+            {bookResults.length > 0 && (
+              <div className="mt-4 flex max-h-[300px] flex-col gap-2.5 overflow-y-auto pr-1">
+                {bookResults.map((res, i) => (
+                  <div key={i} className="flex items-center gap-2.5 rounded-md bg-bg-secondary p-2">
+                    {isSafeImageUrl(res.coverImage) ? (
+                      <img src={res.coverImage} alt={res.title} className="h-12 w-8.5 rounded object-cover shadow-sm" />
+                    ) : (
+                      <div className="flex h-12 w-8.5 items-center justify-center rounded bg-bg-card text-lg">📚</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-semibold text-text-primary" title={res.title}>{res.title}</p>
+                      <p className="text-[10px] text-text-muted">{res.year || "—"}</p>
+                      <button
+                        onClick={() => addBook(res)}
+                        className="mt-1 cursor-pointer rounded border-none bg-text-primary px-1.5 py-0.5 text-[9.5px] text-white hover:bg-[#2e2d27]"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* AI Recommendations Panel */}
+          <div className="rounded-card border border-border-subtle bg-bg-card p-4.5 shadow-subtle flex flex-col gap-3">
+            <span className={`${LABEL_MONO} mb-1 block`}>🤖 AI Recommendation of the Day</span>
+            <p className="text-[10px] leading-[1.4] text-text-secondary mb-1">
+              Get 1 personalized suggestion for today based on your book reading history.
+            </p>
+
+            {recLoading ? (
+              <div className="flex flex-col items-center justify-center py-5 gap-1.5">
+                <div className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-text-primary border-t-transparent" />
+                <span className="text-[10.5px] text-text-secondary font-mono animate-pulse">Consulting AI...</span>
+              </div>
+            ) : rec ? (
+              <div className="flex flex-col gap-3">
+                <div className="rounded-lg border border-border-subtle bg-[#fcfbfa] p-3.5 flex flex-col gap-3">
+                  <div className="flex gap-3">
+                    {rec.coverImage ? (
+                      <img src={rec.coverImage} alt={rec.title} className="h-[76px] w-[52px] shrink-0 rounded object-cover shadow-sm border border-border-subtle" />
+                    ) : (
+                      <div className="flex h-[76px] w-[52px] shrink-0 items-center justify-center rounded bg-bg-secondary text-lg border border-border-subtle">
+                        📚
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1 flex flex-col justify-between">
+                      <div>
+                        <span className="text-[12.5px] font-bold text-text-primary leading-tight block">
+                          {rec.title}
+                        </span>
+                        <span className="text-[10px] text-text-muted mt-0.5 block">
+                          By {rec.author} {rec.releaseYear ? `(${rec.releaseYear})` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {rec.synopsis && (
+                    <div className="text-[10.5px] leading-[1.4] text-text-secondary border-t border-border-subtle pt-2">
+                      <span className="font-semibold text-text-primary block mb-0.5">Synopsis</span>
+                      {rec.synopsis}
+                    </div>
+                  )}
+
+                  {rec.rationale && (
+                    <div className="text-[10px] leading-[1.4] text-text-muted italic bg-bg-secondary/35 p-2 rounded border border-border-subtle/50">
+                      💡 {rec.rationale}
+                    </div>
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-text-primary" title={res.title}>{res.title}</p>
-                  <p className="mt-0.5 text-[10px] text-text-muted">{res.year || "—"}</p>
-                  <button
-                    onClick={() => addBook(res)}
-                    className="mt-2 rounded-md border border-border-subtle bg-bg-card hover:bg-bg-secondary hover:border-border-hover text-text-primary px-2.5 py-1 text-[10px] font-semibold transition-all duration-150 flex items-center justify-center gap-1 w-fit cursor-pointer"
-                  >
-                    + Add Book
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Your Library Section */}
-      <div>
+                {isLogged ? (
+                  <div className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold py-2">
+                    <span>✓</span> Added to your library
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {showRatingSelector ? (
+                      <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-bg-card p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">Your Rating:</span>
+                          <select
+                            value={ratingInput}
+                            onChange={(e) => setRatingInput(e.target.value)}
+                            className="flex-1 rounded border border-border-subtle bg-bg-card px-1.5 py-1 text-xs text-text-primary outline-none"
+                          >
+                            {Array.from({ length: 10 }, (_, i) => 10 - i).map((score) => (
+                              <option key={score} value={score}>{score}/10</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => logRecommendation("completed")}
+                            disabled={logActionLoading}
+                            className="rounded bg-text-primary text-[10px] font-bold text-white py-1.5 hover:bg-[#2e2d27] disabled:opacity-50 text-center"
+                          >
+                            {logActionLoading ? "Saving..." : "Log"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowRatingSelector(false)}
+                            className="rounded border border-border-subtle bg-transparent text-[10px] text-text-secondary py-1.5 hover:bg-bg-secondary text-center animate-[fadeIn_0.2s_ease]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowRatingSelector(true)}
+                          disabled={logActionLoading}
+                          className="rounded-md border border-text-primary bg-text-primary text-[11px] font-semibold text-white py-2 hover:bg-[#2e2d27] cursor-pointer disabled:opacity-50 animate-[fadeIn_0.2s_ease]"
+                        >
+                          Completed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => logRecommendation("dropped")}
+                          disabled={logActionLoading}
+                          className="rounded-md border border-border-subtle bg-transparent text-[11px] font-semibold text-[#b3666b] py-2 hover:bg-[#fef2f2] hover:border-red-200 cursor-pointer disabled:opacity-50"
+                        >
+                          Dropped
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {recError && (
+              <p className="text-[10px] text-[#b3666b] mt-2 text-center">{recError}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Your Library Section */}
+        <div>
         <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-serif text-lg font-bold tracking-tight text-text-primary">Your Library</h2>
 
@@ -303,5 +533,6 @@ export const BooksTab: React.FC<BooksTabProps> = ({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

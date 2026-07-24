@@ -74,6 +74,7 @@ export interface InvestmentAsset {
   currentPrice?: number;
   currentPriceUsd?: number;
   currentPriceInr?: number;
+  previousClose?: number | null;
   notes?: string;
   createdAt: number;
 }

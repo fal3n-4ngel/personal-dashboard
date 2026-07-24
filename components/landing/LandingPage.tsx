@@ -469,14 +469,7 @@ export default function LandingPage({
           <BentoLogo size={12} color="#6e6c64" />
           Self-hostable · Open source · Private
         </span>
-        <div className={`mt-2.5 mb-2 flex justify-center ${HERO_REVEAL} [animation-delay:0.04s]`}>
-          <a
-            href="#chatgpt"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#1d4ed8] no-underline transition-all duration-200 hover:border-[#93c5fd] hover:bg-[#dbeafe]"
-          >
-            🤖 Our flagship feature: chat with your dashboard via ChatGPT or custom AI agents →
-          </a>
-        </div>
+
         <h1 className={`${HERO_TITLE} ${HERO_REVEAL} [animation-delay:0.08s]`}>
           One dashboard.
           <br />

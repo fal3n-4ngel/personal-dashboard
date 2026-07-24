@@ -37,6 +37,7 @@ interface WatchlistTabProps {
   enrichMissingPosters?: () => void;
   isEnrichingPosters?: boolean;
   onItemClick: (item: WatchlistItem) => void;
+  idToken?: string;
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle";
@@ -92,6 +93,7 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   enrichMissingPosters,
   isEnrichingPosters = false,
   onItemClick,
+  idToken,
 }) => {
   const exportLetterboxdCSV = () => {
     const movies = watchlist.filter((item) => item.type === "movie" && item.status === "completed");
@@ -129,6 +131,114 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
   const [activeCategoryTab, setActiveCategoryTab] = React.useState<"movie" | "show" | "anime">("movie");
   const [titleSearch, setTitleSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState<"title" | "rating" | "year">("year");
+
+  interface AIRecommendation {
+    title: string;
+    releaseYear?: string;
+    rationale: string;
+    synopsis: string;
+    coverImage?: string | null;
+    score?: string | null;
+    date: string;
+    isLogged?: boolean;
+  }
+
+  const [rec, setRec] = React.useState<AIRecommendation | null>(null);
+  const [recLoading, setRecLoading] = React.useState(false);
+  const [recError, setRecError] = React.useState<string | null>(null);
+  const [isLogged, setIsLogged] = React.useState(false);
+  const [ratingInput, setRatingInput] = React.useState<string>("8");
+  const [showRatingSelector, setShowRatingSelector] = React.useState(false);
+  const [logActionLoading, setLogActionLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!idToken) return;
+
+    setRec(null);
+    setIsLogged(false);
+    setRecLoading(true);
+    setRecError(null);
+    setShowRatingSelector(false);
+
+    fetch(`/api/assistant/recommendations?type=${activeCategoryTab}`, {
+      headers: {
+        authorization: `Bearer ${idToken}`,
+      },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load recommendation.");
+        return res.json();
+      })
+      .then((data) => {
+        const recommendation = data.recommendation || null;
+        if (recommendation) {
+          setRec(recommendation);
+          setIsLogged(recommendation.isLogged || false);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        setRecError(err.message || "Failed to fetch suggestion.");
+      })
+      .finally(() => {
+        setRecLoading(false);
+      });
+  }, [activeCategoryTab, idToken]);
+
+  const logRecommendation = async (status: "completed" | "dropped") => {
+    if (!rec) return;
+    setLogActionLoading(true);
+    try {
+      const score = status === "completed" ? parseInt(ratingInput, 10) : null;
+      const body = {
+        title: rec.title,
+        type: activeCategoryTab,
+        status: status,
+        progress: 0,
+        totalEpisodes: null,
+        rating: score,
+        coverImage: rec.coverImage || null,
+        year: rec.releaseYear ? parseInt(rec.releaseYear, 10) : null,
+      };
+
+      const apiRes = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!apiRes.ok) {
+        throw new Error("Failed to log recommendation.");
+      }
+
+      // Mark as logged in Firestore recommendations cache document
+      await fetch("/api/assistant/recommendations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          type: activeCategoryTab,
+          date: rec.date,
+          isLogged: true,
+        }),
+      });
+
+      setIsLogged(true);
+      setShowRatingSelector(false);
+
+      window.dispatchEvent(new Event("watchlist-updated"));
+    } catch (err: any) {
+      console.error(err);
+      setRecError(err.message || "Failed to save recommendation.");
+    } finally {
+      setLogActionLoading(false);
+    }
+  };
 
   // Category tab is now a strict 3-way split: Movies / TV Shows / Anime each
   // show only their own type — no more combined "Movies & Shows" bucket.
@@ -350,8 +460,10 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
 
       {/* Main 2-Column Section */}
       <div className="grid grid-cols-[260px_minmax(0,1fr)] items-start gap-5 max-md:grid-cols-1">
-        {/* Left Column: SEARCH & ADD */}
-        <div className={BENTO_CARD}>
+        {/* Left Column wrapper */}
+        <div className="flex flex-col gap-5">
+          {/* SEARCH & ADD CARD */}
+          <div className={BENTO_CARD}>
           <span className={`${LABEL_MONO} mb-1 block`}>SEARCH &amp; ADD</span>
           <p className="mb-3.5 text-[11px] text-text-muted">AniList &amp; Trakt search</p>
 
@@ -400,10 +512,129 @@ export const WatchlistTab: React.FC<WatchlistTabProps> = ({
               ))}
             </div>
           )}
-        </div>
+          </div>
 
-        {/* Right Column: Watchlist Bento Container */}
-        <div className={`${BENTO_CARD} p-5`}>
+          {/* AI Recommendations Panel */}
+          <div className={BENTO_CARD}>
+          <span className={`${LABEL_MONO} mb-3 block`}>🤖 AI Recommendation of the Day</span>
+          <p className="text-[10px] leading-[1.4] text-text-secondary mb-3">
+            Get 1 personalized suggestion for today based on your {activeCategoryTab === "movie" ? "movies" : activeCategoryTab === "show" ? "shows" : "anime"} watch history.
+          </p>
+
+          {recLoading ? (
+            <div className="flex flex-col items-center justify-center py-5 gap-1.5">
+              <div className="h-4.5 w-4.5 animate-spin rounded-full border-2 border-text-primary border-t-transparent" />
+              <span className="text-[10.5px] text-text-secondary font-mono animate-pulse">Consulting AI...</span>
+            </div>
+          ) : rec ? (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-lg border border-border-subtle bg-[#fcfbfa] p-3.5 flex flex-col gap-3">
+                <div className="flex gap-3">
+                  {rec.coverImage ? (
+                    <img src={rec.coverImage} alt={rec.title} className="h-[76px] w-[52px] shrink-0 rounded object-cover shadow-sm border border-border-subtle" />
+                  ) : (
+                    <div className="flex h-[76px] w-[52px] shrink-0 items-center justify-center rounded bg-bg-secondary text-lg border border-border-subtle">
+                      🎬
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[12.5px] font-bold text-text-primary leading-tight block">
+                        {rec.title}
+                      </span>
+                      <span className="text-[10px] text-text-muted mt-0.5 block">
+                        {rec.releaseYear ? `${rec.releaseYear}` : "—"}
+                      </span>
+                    </div>
+                    {rec.score && (
+                      <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-[#b3666b]">
+                        <span>⭐</span> {rec.score}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {rec.synopsis && (
+                  <div className="text-[10.5px] leading-[1.4] text-text-secondary border-t border-border-subtle pt-2">
+                    <span className="font-semibold text-text-primary block mb-0.5">Synopsis</span>
+                    {rec.synopsis}
+                  </div>
+                )}
+
+                {rec.rationale && (
+                  <div className="text-[10px] leading-[1.4] text-text-muted italic bg-bg-secondary/35 p-2 rounded border border-border-subtle/50">
+                    💡 {rec.rationale}
+                  </div>
+                )}
+              </div>
+
+              {isLogged ? (
+                <div className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold py-2">
+                  <span>✓</span> Added to your list
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {showRatingSelector ? (
+                    <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-bg-card p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">Your Rating:</span>
+                        <select
+                          value={ratingInput}
+                          onChange={(e) => setRatingInput(e.target.value)}
+                          className="flex-1 rounded border border-border-subtle bg-bg-card px-1.5 py-1 text-xs text-text-primary outline-none"
+                        >
+                          {Array.from({ length: 10 }, (_, i) => 10 - i).map((score) => (
+                            <option key={score} value={score}>{score}/10</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => logRecommendation("completed")}
+                          disabled={logActionLoading}
+                          className="rounded bg-text-primary text-[10px] font-bold text-white py-1.5 hover:bg-[#2e2d27] disabled:opacity-50 text-center"
+                        >
+                          {logActionLoading ? "Saving..." : "Log"}
+                        </button>
+                        <button
+                          onClick={() => setShowRatingSelector(false)}
+                          className="rounded border border-border-subtle bg-transparent text-[10px] text-text-secondary py-1.5 hover:bg-bg-secondary text-center animate-[fadeIn_0.2s_ease]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setShowRatingSelector(true)}
+                        disabled={logActionLoading}
+                        className="rounded-md border border-text-primary bg-text-primary text-[11px] font-semibold text-white py-2 hover:bg-[#2e2d27] cursor-pointer disabled:opacity-50"
+                      >
+                        Completed
+                      </button>
+                      <button
+                        onClick={() => logRecommendation("dropped")}
+                        disabled={logActionLoading}
+                        className="rounded-md border border-border-subtle bg-transparent text-[11px] font-semibold text-[#b3666b] py-2 hover:bg-[#fef2f2] hover:border-red-200 cursor-pointer disabled:opacity-50"
+                      >
+                        Dropped
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {recError && (
+            <p className="text-[10px] text-[#b3666b] mt-2 text-center">{recError}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Right Column: Watchlist Bento Container */}
+      <div className={`${BENTO_CARD} p-5`}>
           {/* Header Row Controls */}
           <div className="mb-4 flex flex-col gap-3 border-b border-border-subtle pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">

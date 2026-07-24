@@ -34,19 +34,26 @@ export async function fetchAssetPrice(
   category: string,
   name: string,
   usdToInr: number
-): Promise<{ priceInr: number; priceUsd: number } | null> {
+): Promise<{ priceInr: number; priceUsd: number; previousCloseInr: number | null; previousCloseUsd: number | null } | null> {
   if (category === 'crypto') {
     const binanceSymbol = getBinanceSymbol(name);
     if (binanceSymbol) {
       try {
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`);
+        // 24hr ticker (not the plain price endpoint) so we get prevClosePrice
+        // alongside lastPrice in the same request — crypto trades round the
+        // clock, so this rolling 24h window is the closest equivalent to a
+        // market's "previous close" for a day-change figure.
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
         if (res.ok) {
           const data = await res.json();
-          const priceUsd = parseFloat(data.price);
+          const priceUsd = parseFloat(data.lastPrice);
+          const prevCloseUsd = parseFloat(data.prevClosePrice);
           if (!isNaN(priceUsd)) {
             return {
               priceInr: priceUsd * usdToInr,
               priceUsd,
+              previousCloseInr: !isNaN(prevCloseUsd) ? prevCloseUsd * usdToInr : null,
+              previousCloseUsd: !isNaN(prevCloseUsd) ? prevCloseUsd : null,
             };
           }
         }
@@ -62,21 +69,37 @@ export async function fetchAssetPrice(
         const data = await res.json();
         const meta = data?.chart?.result?.[0]?.meta;
         const price = meta?.regularMarketPrice;
+        const prevClose = meta?.chartPreviousClose ?? meta?.previousClose;
         const currencyCode = meta?.currency || "USD";
 
         if (price !== undefined) {
           let priceInr = price;
           let priceUsd = price;
+          let previousCloseInr: number | null = null;
+          let previousCloseUsd: number | null = null;
 
           if (currencyCode === "USD") {
             priceInr = price * usdToInr;
+            if (prevClose !== undefined) {
+              previousCloseUsd = prevClose;
+              previousCloseInr = prevClose * usdToInr;
+            }
           } else if (currencyCode === "INR") {
             priceUsd = price / usdToInr;
+            if (prevClose !== undefined) {
+              previousCloseInr = prevClose;
+              previousCloseUsd = prevClose / usdToInr;
+            }
+          } else if (prevClose !== undefined) {
+            previousCloseInr = prevClose;
+            previousCloseUsd = prevClose;
           }
 
           return {
             priceInr,
             priceUsd,
+            previousCloseInr,
+            previousCloseUsd,
           };
         }
       }

@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server';
 import { enableInvestmentPortfolios, enableGeminiChatAssitant } from '../../flags';
 
 export async function GET() {
-  // Safe shortcut: in local development without Vercel configuration/secrets,
-  // return fallback directly to avoid spamming console logs with Vercel Flags SDK connection warnings.
-  const hasVercelConfig = !!(process.env.FLAGS_SECRET || process.env.VERCEL || process.env.EDGE_CONFIG);
+  // In local development, default flags to true to ensure features are accessible
+  // unless explicitly overridden in env variables.
+  const isDev = process.env.NODE_ENV === 'development';
   
-  if (!hasVercelConfig) {
+  if (isDev) {
     const envInvest = process.env.ENABLE_INVESTMENT_PORTFOLIOS || process.env.enableInvestmentPortfolios;
     const envChat = process.env.ENABLE_GEMINI_CHAT_ASSITANT || process.env.enableGeminiChatAssitant;
+    
     return NextResponse.json({
-      enableInvestmentPortfolios: envInvest !== 'false',
-      enableGeminiChatAssitant: envChat !== 'false'
+      enableInvestmentPortfolios: envInvest !== undefined ? envInvest === 'true' : true,
+      enableGeminiChatAssitant: envChat !== undefined ? envChat === 'true' : true
     });
   }
 

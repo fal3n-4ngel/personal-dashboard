@@ -224,6 +224,43 @@ export function validateSubscriptionPatch(body: unknown): Partial<Omit<Subscript
 
 /* ─── Dashboard Settings ─── */
 
+const MAX_RECONCILIATION_ENTRIES = 366; // ~a year of pay cycles
+
+function asReconciliationsMap(value: unknown, field: string): Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    badRequest(`Field '${field}' must be an object.`);
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > MAX_RECONCILIATION_ENTRIES) {
+    badRequest(`Field '${field}' must contain at most ${MAX_RECONCILIATION_ENTRIES} entries.`);
+  }
+  const result: Record<string, number> = {};
+  for (const [key, val] of entries) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) badRequest(`Field '${field}' has an invalid date key: '${key}'.`);
+    result[key] = asNumber(val, `${field}.${key}`, { min: 0, max: 1_000_000_000 });
+  }
+  return result;
+}
+
+function asSalaryLogMap(value: unknown, field: string): Record<string, { date: string; amount: number }> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    badRequest(`Field '${field}' must be an object.`);
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > MAX_RECONCILIATION_ENTRIES) {
+    badRequest(`Field '${field}' must contain at most ${MAX_RECONCILIATION_ENTRIES} entries.`);
+  }
+  const result: Record<string, { date: string; amount: number }> = {};
+  for (const [key, val] of entries) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) badRequest(`Field '${field}' has an invalid date key: '${key}'.`);
+    const entry = requireObject(val, `${field}.${key}`);
+    const date = asDate(entry.date, `${field}.${key}.date`) ?? badRequest(`Field '${field}.${key}.date' is required.`);
+    const amount = asNumber(entry.amount, `${field}.${key}.amount`, { min: 0, max: 1_000_000_000 });
+    result[key] = { date, amount };
+  }
+  return result;
+}
+
 // Whitelists patchable fields — arbitrary keys in the body are dropped
 // rather than written to Firestore.
 export function validateSettingsPatch(body: unknown): Partial<Omit<DashboardSettings, "updatedAt">> {
@@ -231,8 +268,12 @@ export function validateSettingsPatch(body: unknown): Partial<Omit<DashboardSett
   const patch: Partial<Omit<DashboardSettings, "updatedAt">> = {};
   if (b.timeFilter !== undefined) patch.timeFilter = asEnum(b.timeFilter, "timeFilter", TIME_FILTERS, true)!;
   if (b.salaryDay !== undefined) patch.salaryDay = asNumber(b.salaryDay, "salaryDay", { min: 1, max: 31, integer: true });
+  if (b.monthlySalary !== undefined) patch.monthlySalary = asNumber(b.monthlySalary, "monthlySalary", { min: 0 });
+  if (b.additionalIncome !== undefined) patch.additionalIncome = asNumber(b.additionalIncome, "additionalIncome", { min: 0 });
+  if (b.reconciliations !== undefined) patch.reconciliations = asReconciliationsMap(b.reconciliations, "reconciliations");
+  if (b.salaryLog !== undefined) patch.salaryLog = asSalaryLogMap(b.salaryLog, "salaryLog");
   if (Object.keys(patch).length === 0) {
-    badRequest("Patch body must include at least one of: timeFilter, salaryDay.");
+    badRequest("Patch body must include at least one of: timeFilter, salaryDay, monthlySalary, additionalIncome, reconciliations.");
   }
   return patch;
 }
@@ -267,6 +308,7 @@ function validateInvestmentAsset(raw: unknown, index: number): InvestmentAsset {
       quantity: b.quantity !== undefined && b.quantity !== null && b.quantity !== "" ? asNumber(b.quantity, "quantity", { min: 0 }) : undefined,
       buyPrice: b.buyPrice !== undefined && b.buyPrice !== null && b.buyPrice !== "" ? asNumber(b.buyPrice, "buyPrice", { min: 0 }) : undefined,
       currentPrice: b.currentPrice !== undefined && b.currentPrice !== null && b.currentPrice !== "" ? asNumber(b.currentPrice, "currentPrice", { min: 0 }) : undefined,
+      previousClose: b.previousClose !== undefined && b.previousClose !== null && b.previousClose !== "" ? asNumber(b.previousClose, "previousClose", { min: 0 }) : null,
       notes: asTrimmedString(b.notes, "notes", 1000, false),
       createdAt: typeof b.createdAt === "number" ? b.createdAt : Date.now(),
     };

@@ -95,6 +95,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
           <span>Ledger</span>
         </div>
+        <div onClick={() => setActiveTab("financial")} className={mobileNavLinkClass(activeTab === "financial")}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>Health</span>
+        </div>
         <div onClick={() => setActiveTab("media")} className={mobileNavLinkClass(activeTab === "media")}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
           <span>Watchlist</span>
@@ -113,6 +117,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
             <span>Invest</span>
           </div>
         )}
+        <div onClick={() => setActiveTab("reports")} className={mobileNavLinkClass(activeTab === "reports")}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Reports</span>
+        </div>
       </nav>
     </>
   );

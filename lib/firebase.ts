@@ -768,6 +768,7 @@ export interface InvestmentAsset {
   quantity?: number;
   buyPrice?: number;
   currentPrice?: number;
+  previousClose?: number | null;
   notes?: string;
   createdAt?: number;
 }
@@ -802,6 +803,7 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
       quantity: a.quantity !== undefined && a.quantity !== null ? Number(a.quantity) : undefined,
       buyPrice: a.buyPrice !== undefined && a.buyPrice !== null ? Number(a.buyPrice) : undefined,
       currentPrice: a.currentPrice !== undefined && a.currentPrice !== null ? Number(a.currentPrice) : undefined,
+      previousClose: a.previousClose !== undefined && a.previousClose !== null ? Number(a.previousClose) : null,
       notes: a.notes ? String(a.notes) : undefined,
       createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
     }));
@@ -856,6 +858,17 @@ export async function updatePortfolioValuationHistory(
 export interface DashboardSettings {
   timeFilter: "7" | "30" | "90" | "salary" | "all";
   salaryDay: number;
+  monthlySalary?: number;
+  additionalIncome?: number;
+  // Keyed by pay-cycle start date (YYYY-MM-DD) — the actual "cash on hand"
+  // amount the user confirmed during the Financial Health reconciliation
+  // check, so it survives reloads instead of resetting every visit.
+  reconciliations?: Record<string, number>;
+  // Keyed by the logged payday itself (YYYY-MM-DD) — lets pay-cycle math
+  // snap to an actual salary date + amount instead of assuming a fixed
+  // day-of-month, since many paydays are business-day rules ("last working
+  // day before the 25th") that shift month to month.
+  salaryLog?: Record<string, { date: string; amount: number }>;
   updatedAt: number;
 }
 
@@ -870,9 +883,28 @@ export async function getSettings(session: Session): Promise<DashboardSettings |
   try {
     const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/settings/${session.uid}`);
     const data = fromFields(res.fields || {});
+    const reconciliationsRaw = data.reconciliations && typeof data.reconciliations === "object" ? data.reconciliations : {};
+    const reconciliations: Record<string, number> = {};
+    Object.entries(reconciliationsRaw as Record<string, unknown>).forEach(([k, v]) => {
+      reconciliations[k] = Number(v || 0);
+    });
+
+    const salaryLogRaw = data.salaryLog && typeof data.salaryLog === "object" ? data.salaryLog : {};
+    const salaryLog: Record<string, { date: string; amount: number }> = {};
+    Object.entries(salaryLogRaw as Record<string, unknown>).forEach(([k, v]) => {
+      const entry = v as Record<string, unknown>;
+      if (entry && typeof entry === "object") {
+        salaryLog[k] = { date: String(entry.date || k), amount: Number(entry.amount || 0) };
+      }
+    });
+
     const record: DashboardSettings = {
       timeFilter: (data.timeFilter as DashboardSettings["timeFilter"]) || "all",
       salaryDay: Number(data.salaryDay || 1),
+      monthlySalary: Number(data.monthlySalary || 0),
+      additionalIncome: Number(data.additionalIncome || 0),
+      reconciliations,
+      salaryLog,
       updatedAt: Number(data.updatedAt || 0),
     };
     await cacheSet(cacheKey, record, SETTINGS_CACHE_TTL);
@@ -896,4 +928,63 @@ export async function updateSettings(session: Session, updates: Partial<Omit<Das
     body: JSON.stringify({ fields: toFields(docData) }),
   });
   await cacheInvalidate(settingsCacheKey(session));
+}
+
+export interface DailyRecommendation {
+  type: "movie" | "show" | "anime" | "book";
+  title: string;
+  releaseYear?: string;
+  author?: string;
+  synopsis: string;
+  rationale: string;
+  score?: number | string | null;
+  coverImage?: string | null;
+  isLogged?: boolean;
+  date: string;
+}
+
+const RECOMMENDATIONS_CACHE_TTL = 3600; // 1 hour
+function recommendationsCacheKey(session: Session): string {
+  return `recommendations:${session.config.projectId}:${session.uid}`;
+}
+
+export async function getDailyRecommendations(session: Session): Promise<Record<string, DailyRecommendation>> {
+  const cacheKey = recommendationsCacheKey(session);
+  const cached = await cacheGet<Record<string, DailyRecommendation>>(cacheKey);
+  if (cached !== undefined && cached !== null) return cached;
+
+  try {
+    const snap = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/recommendations/${session.uid}`);
+    const data = (fromFields(snap.fields || {}).items as Record<string, DailyRecommendation>) || {};
+    await cacheSet(cacheKey, data, RECOMMENDATIONS_CACHE_TTL);
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      const empty = {};
+      await cacheSet(cacheKey, empty, RECOMMENDATIONS_CACHE_TTL);
+      return empty;
+    }
+    throw error;
+  }
+}
+
+export async function saveDailyRecommendation(
+  session: Session,
+  key: string,
+  recommendation: DailyRecommendation
+) {
+  const current = await getDailyRecommendations(session);
+  current[key] = recommendation;
+
+  const url = `${docsRoot(session)}/recommendations/${session.uid}`;
+  const body = {
+    fields: toFields({ items: current }),
+  };
+
+  await fsFetch(session, url, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  
+  await cacheInvalidate(recommendationsCacheKey(session));
 }

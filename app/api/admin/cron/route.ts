@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
       cronPath = "/api/cron/expenses?period=monthly";
     } else if (triggerType === "portfolio") {
       cronPath = "/api/cron/portfolio";
+    } else if (triggerType === "recommendations") {
+      cronPath = "/api/cron/recommendations";
     } else {
       return NextResponse.json({ error: "Invalid trigger type." }, { status: 400 });
     }

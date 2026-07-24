@@ -1,5 +1,5 @@
 import React from "react";
-import { Expense } from "@/types";
+import { Expense, Subscription } from "@/types";
 
 interface ExpensesTabProps {
   currency: string;
@@ -47,6 +47,7 @@ interface ExpensesTabProps {
   setLedgerMaxAmount: (s: string) => void;
   isFetchingExpenses: boolean;
   expensesLoaded: boolean;
+  subscriptions: Subscription[];
 }
 
 const STAT_CARD = "flex flex-col gap-1 rounded-card border border-border-subtle bg-bg-card p-5 shadow-subtle";
@@ -116,9 +117,33 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
   setLedgerMaxAmount,
   isFetchingExpenses,
   expensesLoaded,
+  subscriptions,
 }) => {
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageSize = 15;
+
+  const upcomingSubscriptions = React.useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    sevenDaysFromNow.setHours(23, 59, 59, 999);
+
+    const parseDateOnly = (dateStr: string) => {
+      const parts = dateStr.split("-");
+      if (parts.length !== 3) return new Date();
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    };
+
+    return (subscriptions || []).filter((sub) => {
+      if (!sub.nextBillingDate) return false;
+      const dueDate = parseDateOnly(sub.nextBillingDate);
+      return dueDate >= now && dueDate <= sevenDaysFromNow;
+    }).sort((a, b) => {
+      const aDate = a.nextBillingDate ? parseDateOnly(a.nextBillingDate).getTime() : 0;
+      const bDate = b.nextBillingDate ? parseDateOnly(b.nextBillingDate).getTime() : 0;
+      return aDate - bDate;
+    });
+  }, [subscriptions]);
 
   React.useEffect(() => {
     setCurrentPage(1);
@@ -276,6 +301,38 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
               </div>
             )}
           </div>
+
+          {/* Upcoming Bills Calendar Widget */}
+          {upcomingSubscriptions.length > 0 && (
+            <div className={BENTO_CARD}>
+              <h3 className="text-sm font-semibold tracking-[-0.3px] text-text-primary mb-3 flex items-center gap-1.5">
+                <span>📅</span> Upcoming Bills (Next 7 Days)
+              </h3>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">
+                {upcomingSubscriptions.map((sub) => {
+                  const parts = sub.nextBillingDate ? sub.nextBillingDate.split("-") : [];
+                  const dueStr = parts.length === 3 ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : sub.nextBillingDate;
+                  return (
+                    <div key={sub.id} className="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-primary/20 p-3.5 shadow-subtle hover:border-border-hover transition-all duration-200">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{sub.icon || "💳"}</span>
+                        <div>
+                          <div className="text-[13px] font-semibold text-text-primary">{sub.name}</div>
+                          <div className="text-[11px] text-[#b3666b] font-medium mt-0.5">Due {dueStr}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[14px] font-bold text-text-primary">
+                          {currency}{sub.cost.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-text-muted capitalize">{sub.billingCycle}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Form + Table */}
           <div className="grid grid-cols-[300px_1fr] gap-6 max-md:grid-cols-1">

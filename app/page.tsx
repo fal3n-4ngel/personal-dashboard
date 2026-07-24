@@ -13,7 +13,7 @@ import {
   SearchResult,
   InvestmentQuote,
 } from "@/types";
-import { getNextFutureBillingDate, getSalaryCycleRange } from "@/lib/dates";
+import { getNextFutureBillingDate, resolvePayCycle, toLocalDateStr } from "@/lib/dates";
 import { anilistQuery } from "@/lib/anilist";
 import { traktRequest } from "@/lib/trakt-client";
 import { pushWatchlistUpdate } from "@/lib/sync-push";
@@ -32,6 +32,8 @@ import { WatchlistTab } from "@/components/dashboard/WatchlistTab";
 import { BooksTab } from "@/components/dashboard/BooksTab";
 import { NotesTab } from "@/components/dashboard/NotesTab";
 import { InvestmentsTab } from "@/components/dashboard/InvestmentsTab";
+import { FinancialHealthTab } from "@/components/dashboard/FinancialHealthTab";
+import { ReportsTab } from "@/components/dashboard/ReportsTab";
 import { MediaDetailsModal } from "@/components/dashboard/MediaDetailsModal";
 import { GeminiChatBubble } from "@/components/dashboard/GeminiChatBubble";
 
@@ -88,6 +90,22 @@ export default function Dashboard() {
     const cached = parseInt(window.localStorage.getItem("phub_salary_day") || "", 10);
     return cached >= 1 && cached <= 31 ? cached : 1;
   });
+  const [monthlySalary, setMonthlySalaryState] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const cached = parseFloat(window.localStorage.getItem("phub_monthly_salary") || "0");
+    return isNaN(cached) ? 0 : cached;
+  });
+  const [additionalIncome, setAdditionalIncomeState] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const cached = parseFloat(window.localStorage.getItem("phub_additional_income") || "0");
+    return isNaN(cached) ? 0 : cached;
+  });
+  // Reconciliation answers keyed by pay-cycle start date — sparse and only
+  // meaningful once loaded from Firestore, so no localStorage seed here.
+  const [reconciliations, setReconciliationsState] = useState<Record<string, number>>({});
+  // Logged paydays keyed by the payday itself — same sparse, Firestore-only
+  // loading pattern.
+  const [salaryLog, setSalaryLogState] = useState<Record<string, { date: string; amount: number }>>({});
   const [activeChart, setActiveChart] = useState<"category" | "trend">("category");
   const [expenseSearch, setExpenseSearch] = useState("");
   const [ledgerCategoryFilter, setLedgerCategoryFilter] = useState("");
@@ -1030,8 +1048,6 @@ export default function Dashboard() {
     }
   };
 
-  // Reconciles the localStorage-seeded timeFilter/salaryDay against the
-  // Firestore copy (source of truth across devices) once auth is ready.
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/settings", { headers: getHeaders() });
@@ -1044,6 +1060,20 @@ export default function Dashboard() {
         if (data.salaryDay) {
           setSalaryDayState(data.salaryDay);
           localStorage.setItem("phub_salary_day", String(data.salaryDay));
+        }
+        if (data.monthlySalary !== undefined) {
+          setMonthlySalaryState(data.monthlySalary);
+          localStorage.setItem("phub_monthly_salary", String(data.monthlySalary));
+        }
+        if (data.additionalIncome !== undefined) {
+          setAdditionalIncomeState(data.additionalIncome);
+          localStorage.setItem("phub_additional_income", String(data.additionalIncome));
+        }
+        if (data.reconciliations && typeof data.reconciliations === "object") {
+          setReconciliationsState(data.reconciliations);
+        }
+        if (data.salaryLog && typeof data.salaryLog === "object") {
+          setSalaryLogState(data.salaryLog);
         }
       }
     } catch (err) {
@@ -1070,6 +1100,41 @@ export default function Dashboard() {
     }
   };
 
+  const setMonthlySalary = (val: number) => {
+    setMonthlySalaryState(val);
+    localStorage.setItem("phub_monthly_salary", String(val));
+    if (user) {
+      fetch("/api/settings", { method: "PATCH", headers: getHeaders(), body: JSON.stringify({ monthlySalary: val }) }).catch((err) => console.error(err));
+    }
+  };
+
+  const setAdditionalIncome = (val: number) => {
+    setAdditionalIncomeState(val);
+    localStorage.setItem("phub_additional_income", String(val));
+    if (user) {
+      fetch("/api/settings", { method: "PATCH", headers: getHeaders(), body: JSON.stringify({ additionalIncome: val }) }).catch((err) => console.error(err));
+    }
+  };
+
+  // Firestore's update mask replaces the whole `reconciliations` map, so we
+  // merge the new entry into the current one client-side before sending —
+  // same pattern as the portfolio's valuationHistory snapshots.
+  const setReconciliation = (cycleStartDate: string, actualAmount: number) => {
+    const next = { ...reconciliations, [cycleStartDate]: actualAmount };
+    setReconciliationsState(next);
+    if (user) {
+      fetch("/api/settings", { method: "PATCH", headers: getHeaders(), body: JSON.stringify({ reconciliations: next }) }).catch((err) => console.error(err));
+    }
+  };
+
+  const setSalaryLogEntry = (date: string, amount: number) => {
+    const next = { ...salaryLog, [date]: { date, amount } };
+    setSalaryLogState(next);
+    if (user) {
+      fetch("/api/settings", { method: "PATCH", headers: getHeaders(), body: JSON.stringify({ salaryLog: next }) }).catch((err) => console.error(err));
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchExpenses();
@@ -1079,6 +1144,14 @@ export default function Dashboard() {
       fetchInvestments();
       fetchSettings();
     }
+  }, [user]);
+
+  useEffect(() => {
+    const handleWatchlistUpdate = () => {
+      fetchWatchlist();
+    };
+    window.addEventListener("watchlist-updated", handleWatchlistUpdate);
+    return () => window.removeEventListener("watchlist-updated", handleWatchlistUpdate);
   }, [user]);
 
   /* ─── Onboarding Guide Check ─── */
@@ -1106,7 +1179,7 @@ export default function Dashboard() {
           title: expenseTitle.trim(),
           amount: parseFloat(expenseAmount),
           category: expenseCategory || null,
-          date: expenseDate || new Date().toISOString().slice(0, 10),
+          date: expenseDate || toLocalDateStr(new Date()),
           notes: expenseNotes.trim() || null,
         }),
       });
@@ -1547,11 +1620,11 @@ const updateMarketPrices = async () => {
     if (timeFilter !== "all") {
       const now = new Date();
       if (timeFilter === "salary") {
-        const { startStr, endStr } = getSalaryCycleRange(salaryDay);
+        const { startStr, endStr } = resolvePayCycle(salaryDay, salaryLog);
         list = list.filter((e) => e.date && e.date >= startStr && e.date <= endStr);
       } else {
         const days = parseInt(timeFilter, 10);
-        const cutoff = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10);
+        const cutoff = toLocalDateStr(new Date(now.getTime() - days * 86400000));
         list = list.filter((e) => e.date && e.date >= cutoff);
       }
     }
@@ -1578,9 +1651,83 @@ const updateMarketPrices = async () => {
     }
 
     return list;
-  }, [expenses, timeFilter, salaryDay, expenseSearch, ledgerCategoryFilter, ledgerMinAmount, ledgerMaxAmount]);
+  }, [expenses, timeFilter, salaryDay, salaryLog, expenseSearch, ledgerCategoryFilter, ledgerMinAmount, ledgerMaxAmount]);
 
   const totalSpent = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0), [filteredExpenses]);
+
+  // Real pay-cycle analytics: spend so far THIS salary cycle (not a rolling
+  // 30-day window, which drifts out of sync with when salary actually
+  // lands), a pace-based projection for the rest of the cycle, and a
+  // same-shape comparison against the previous cycle so "burn rate" means
+  // something concrete instead of an arbitrary trailing average.
+  const payCycle = useMemo(() => {
+    const { startStr, endStr, loggedAmount, prevStartStr, prevEndStr } = resolvePayCycle(salaryDay, salaryLog);
+    const todayStr = toLocalDateStr(new Date());
+    const start = new Date(`${startStr}T00:00:00`);
+    const end = new Date(`${endStr}T00:00:00`);
+    const today = new Date(`${todayStr}T00:00:00`);
+
+    const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    const elapsedDays = Math.min(totalDays, Math.max(1, Math.round((today.getTime() - start.getTime()) / 86400000) + 1));
+    const remainingDays = Math.max(0, totalDays - elapsedDays);
+
+    const cycleExpensesSoFar = expenses.filter((e) => e.date && e.date >= startStr && e.date <= todayStr);
+    const spentSoFar = cycleExpensesSoFar.reduce((acc, e) => acc + (e.amount || 0), 0);
+
+    const subMonthlyCost = subscriptions.reduce((acc, sub) => {
+      let cost = sub.cost || 0;
+      if (sub.billingCycle === "yearly") cost = cost / 12;
+      return acc + cost;
+    }, 0);
+
+    // Pace-projected transactional spend for the full cycle, plus the fixed
+    // monthly-equivalent subscription cost (which isn't paced — it recurs
+    // regardless of how fast you're spending elsewhere).
+    const dailyPace = elapsedDays > 0 ? spentSoFar / elapsedDays : 0;
+    const projectedTransactional = dailyPace * totalDays;
+    const projectedTotalSpend = projectedTransactional + subMonthlyCost;
+
+    // Prefer this cycle's logged payday amount over the persistent "usual"
+    // salary figure, since the whole point of logging is to capture the
+    // rare cycle that actually paid out differently.
+    const salaryThisCycle = loggedAmount ?? monthlySalary;
+    const totalIncome = salaryThisCycle + additionalIncome;
+    // What you should have in hand right now, based purely on logged
+    // expenses against the salary you were credited at cycle start — the
+    // basis for the reconciliation check (does this match reality?).
+    const expectedCashOnHand = totalIncome - spentSoFar;
+    const expectedSavings = totalIncome - projectedTotalSpend;
+    const savingsRate = totalIncome > 0 ? (expectedSavings / totalIncome) * 100 : 0;
+
+    const prevCycleExpenses = expenses.filter((e) => e.date && e.date >= prevStartStr && e.date <= prevEndStr);
+    const prevCycleSpend = prevCycleExpenses.reduce((acc, e) => acc + (e.amount || 0), 0) + subMonthlyCost;
+    const paceDeltaPct = prevCycleSpend > 0 ? ((projectedTotalSpend - prevCycleSpend) / prevCycleSpend) * 100 : null;
+
+    const cycleCatBreakdown: Record<string, number> = {};
+    cycleExpensesSoFar.forEach((e) => {
+      const cat = e.category || "Uncategorized";
+      cycleCatBreakdown[cat] = (cycleCatBreakdown[cat] || 0) + (e.amount || 0);
+    });
+
+    return {
+      startStr,
+      endStr,
+      totalDays,
+      elapsedDays,
+      remainingDays,
+      spentSoFar,
+      subMonthlyCost,
+      projectedTotalSpend,
+      totalIncome,
+      isSalaryLogged: loggedAmount !== null,
+      expectedCashOnHand,
+      expectedSavings,
+      savingsRate,
+      prevCycleSpend,
+      paceDeltaPct,
+      cycleCatBreakdown: Object.fromEntries(Object.entries(cycleCatBreakdown).sort(([, a], [, b]) => b - a)) as Record<string, number>,
+    };
+  }, [expenses, subscriptions, salaryDay, salaryLog, monthlySalary, additionalIncome]);
 
   const largestItem = useMemo(() => {
     if (filteredExpenses.length === 0) return null;
@@ -1729,6 +1876,7 @@ const updateMarketPrices = async () => {
               setLedgerMaxAmount={setLedgerMaxAmount}
               isFetchingExpenses={isFetchingExpenses}
               expensesLoaded={expensesLoaded}
+              subscriptions={subscriptions}
             />
 
             {expenseTab === "subscriptions" && (
@@ -1791,6 +1939,7 @@ const updateMarketPrices = async () => {
             enrichMissingPosters={enrichMissingPosters}
             isEnrichingPosters={isEnrichingPosters}
             onItemClick={setSelectedMediaItem}
+            idToken={user?.idToken}
           />
         )}
 
@@ -1812,6 +1961,7 @@ const updateMarketPrices = async () => {
             enrichMissingBookCovers={enrichMissingBookCovers}
             isEnrichingBookCovers={isEnrichingBookCovers}
             onItemClick={setSelectedMediaItem}
+            idToken={user?.idToken}
           />
         )}
 
@@ -1852,6 +2002,30 @@ const updateMarketPrices = async () => {
             setInvSuggestions={setInvSuggestions}
             selectSuggestion={selectSuggestion}
           />
+        )}
+
+        {/* Financial Health: income, real pay-cycle pace, savings reconciliation, wealth runway */}
+        {activeTab === "financial" && (
+          <FinancialHealthTab
+            currency={currency}
+            investments={investments}
+            showInvestmentsTab={showInvestmentsTab}
+            salaryDay={salaryDay}
+            monthlySalary={monthlySalary}
+            setMonthlySalary={setMonthlySalary}
+            additionalIncome={additionalIncome}
+            setAdditionalIncome={setAdditionalIncome}
+            payCycle={payCycle}
+            savedReconciliation={reconciliations[payCycle.startStr]}
+            setReconciliation={setReconciliation}
+            salaryLog={salaryLog}
+            setSalaryLogEntry={setSalaryLogEntry}
+          />
+        )}
+
+        {/* Reports: filtered CSV exports for expenses and each media type */}
+        {activeTab === "reports" && (
+          <ReportsTab expenses={expenses} watchlist={watchlist} currency={currency} salaryDay={salaryDay} salaryLog={salaryLog} />
         )}
       </main>
 
