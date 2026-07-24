@@ -449,6 +449,7 @@ export async function GET() {
             coverImage: { type: ["string", "null"], description: "Cover image URL" },
             year: { type: ["integer", "null"], description: "Release year" },
             updatedAt: { type: "integer", description: "Last update time (Unix ms)" },
+            createdAt: { type: "integer", description: "When this item was added to the watchlist (Unix ms)" },
           },
         },
         NewWatchlistItem: {

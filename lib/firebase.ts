@@ -33,6 +33,7 @@ export interface WatchlistItem {
   coverImage: string | null;
   year: number | null;
   updatedAt: number;
+  createdAt: number;
   anilistId?: number | null;
   traktId?: number | null;
 }
@@ -462,6 +463,7 @@ async function migrateLegacyWatchlist(session: Session): Promise<Record<string, 
       coverImage: (data.coverImage as string) || null,
       year: typeof data.year === "number" ? data.year : null,
       updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
+      createdAt: typeof data.createdAt === "number" ? data.createdAt : (typeof data.updatedAt === "number" ? data.updatedAt : 0),
       anilistId: typeof data.anilistId === "number" ? data.anilistId : null,
       traktId: typeof data.traktId === "number" ? data.traktId : null,
     };
@@ -494,14 +496,21 @@ async function getRawWatchlist(session: Session): Promise<Record<string, Watchli
 
 export async function listWatchlist(session: Session): Promise<WatchlistItem[]> {
   const itemsMap = await getRawWatchlist(session);
-  const items = Object.entries(itemsMap).map(([id, data]) => ({ ...data, id }));
+  // Items added before createdAt existed have no such field in Firestore —
+  // updatedAt is the closest available proxy for when they first appeared.
+  const items = Object.entries(itemsMap).map(([id, data]) => ({
+    ...data,
+    id,
+    createdAt: typeof data.createdAt === "number" ? data.createdAt : data.updatedAt,
+  }));
   items.sort((a, b) => b.updatedAt - a.updatedAt);
   return items;
 }
 
-export async function addWatchlistItem(session: Session, item: Omit<WatchlistItem, "id" | "updatedAt">) {
+export async function addWatchlistItem(session: Session, item: Omit<WatchlistItem, "id" | "updatedAt" | "createdAt">) {
   const id = randomUUID();
-  const docData = { ...item, updatedAt: Date.now() };
+  const now = Date.now();
+  const docData = { ...item, updatedAt: now, createdAt: now };
 
   await writeWatchlistItems(session, { [id]: docData as unknown as Record<string, unknown> }, new Set([id]));
   await cacheInvalidate(watchlistCacheKey(session));
@@ -511,7 +520,7 @@ export async function addWatchlistItem(session: Session, item: Omit<WatchlistIte
 export async function updateWatchlistItem(
   session: Session,
   id: string,
-  item: Partial<Omit<WatchlistItem, "id" | "updatedAt">>
+  item: Partial<Omit<WatchlistItem, "id" | "updatedAt" | "createdAt">>
 ) {
   const patch: Record<string, unknown> = { ...item, updatedAt: Date.now() };
   Object.keys(patch).forEach((key) => {
@@ -620,6 +629,7 @@ export async function bulkSyncWatchlist(
         anilistId: entry.anilistId ?? null,
         traktId: entry.traktId ?? null,
         updatedAt: now,
+        createdAt: now,
       };
       newIds.add(id);
       added++;

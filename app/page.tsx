@@ -1339,7 +1339,7 @@ export default function Dashboard() {
   };
 
   const addToWatchlist = async (res: SearchResult) => {
-    const body: Omit<WatchlistItem, "id" | "updatedAt"> = {
+    const body: Omit<WatchlistItem, "id" | "updatedAt" | "createdAt"> = {
       title: res.title,
       type: res.type,
       status: "plan_to_watch",
@@ -1452,7 +1452,7 @@ export default function Dashboard() {
   };
 
   const addBook = async (b: SearchResult) => {
-    const body: Omit<WatchlistItem, "id" | "updatedAt"> = {
+    const body: Omit<WatchlistItem, "id" | "updatedAt" | "createdAt"> = {
       title: b.title,
       type: "book",
       status: "plan_to_watch",

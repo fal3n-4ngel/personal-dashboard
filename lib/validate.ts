@@ -107,7 +107,7 @@ export function validateExpenseBatch(items: unknown[]): ExpenseEntry[] {
 
 /* ─── Watchlist ─── */
 
-type NewWatchlistItem = Omit<WatchlistItem, "id" | "updatedAt">;
+type NewWatchlistItem = Omit<WatchlistItem, "id" | "updatedAt" | "createdAt">;
 
 function optionalNullableNumber(
   value: unknown,

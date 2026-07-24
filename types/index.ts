@@ -47,6 +47,9 @@ export interface WatchlistItem {
   coverImage: string | null;
   year: number | null;
   updatedAt: number;
+  // When the item first entered your list — distinct from updatedAt, which
+  // is touched by every status/progress/rating edit and sync.
+  createdAt: number;
   anilistId?: number | null; // store AniList media ID for sync
   traktId?: number | null; // store Trakt media ID for sync
 }

@@ -205,6 +205,8 @@ const MediaReportCard: React.FC<{ title: string; icon: string; type: MediaType; 
   const [yearFrom, setYearFrom] = useState("");
   const [yearTo, setYearTo] = useState("");
   const [minRating, setMinRating] = useState("");
+  const [addedFrom, setAddedFrom] = useState("");
+  const [addedTo, setAddedTo] = useState("");
 
   const typeItems = useMemo(() => items.filter((i) => i.type === type), [items, type]);
 
@@ -218,15 +220,18 @@ const MediaReportCard: React.FC<{ title: string; icon: string; type: MediaType; 
         if (!isNaN(yTo) && (i.year || 0) > yTo) return false;
         const minR = parseFloat(minRating);
         if (!isNaN(minR) && (i.rating || 0) < minR) return false;
+        const entryDate = i.createdAt ? toLocalDateStr(new Date(i.createdAt)) : "";
+        if (addedFrom && (!entryDate || entryDate < addedFrom)) return false;
+        if (addedTo && (!entryDate || entryDate > addedTo)) return false;
         return true;
       })
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }, [typeItems, status, yearFrom, yearTo, minRating]);
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }, [typeItems, status, yearFrom, yearTo, minRating, addedFrom, addedTo]);
 
   const download = () => {
     downloadCsv(
       `${type}_report_${todayStamp()}.csv`,
-      ["Title", "Year", "Status", "Progress", "TotalEpisodes", "Rating", "LastUpdated"],
+      ["Title", "Year", "Status", "Progress", "TotalEpisodes", "Score", "EntryDate", "LastUpdated"],
       filtered.map((i) => [
         i.title,
         i.year ?? "",
@@ -234,6 +239,7 @@ const MediaReportCard: React.FC<{ title: string; icon: string; type: MediaType; 
         i.progress ?? "",
         i.totalEpisodes ?? "",
         i.rating ?? "",
+        i.createdAt ? toLocalDateStr(new Date(i.createdAt)) : "",
         i.updatedAt ? toLocalDateStr(new Date(i.updatedAt)) : "",
       ])
     );
@@ -265,6 +271,16 @@ const MediaReportCard: React.FC<{ title: string; icon: string; type: MediaType; 
           <label className="mb-1 block text-[10px] text-text-muted">Min rating</label>
           <input type="number" min="0" max="10" placeholder="0–10" value={minRating} onChange={(e) => setMinRating(e.target.value)} className={`${INPUT_CLASS} text-xs`} />
         </div>
+        <div className="grid grid-cols-2 gap-2.5 border-t border-border-subtle pt-2.5">
+          <div>
+            <label className="mb-1 block text-[10px] text-text-muted">Added from</label>
+            <input type="date" value={addedFrom} onChange={(e) => setAddedFrom(e.target.value)} className={`${INPUT_CLASS} text-xs`} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] text-text-muted">Added to</label>
+            <input type="date" value={addedTo} onChange={(e) => setAddedTo(e.target.value)} className={`${INPUT_CLASS} text-xs`} />
+          </div>
+        </div>
 
         {filtered.length > 0 && (
           <div className="mt-1 overflow-hidden rounded-lg border border-border-subtle">
@@ -272,16 +288,18 @@ const MediaReportCard: React.FC<{ title: string; icon: string; type: MediaType; 
               <thead>
                 <tr>
                   <th className={LEDGER_TH}>Title</th>
-                  <th className={`${LEDGER_TH} text-right`}>Year</th>
+                  <th className={`${LEDGER_TH} text-right`}>Score</th>
                   <th className={`${LEDGER_TH} text-right`}>Status</th>
+                  <th className={`${LEDGER_TH} text-right`}>Added</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.slice(0, 5).map((i) => (
                   <tr key={i.id}>
-                    <td className={`${LEDGER_TD} max-w-[120px] truncate`}>{i.title}</td>
-                    <td className={`${LEDGER_TD} text-right font-mono`}>{i.year ?? "—"}</td>
+                    <td className={`${LEDGER_TD} max-w-[110px] truncate`}>{i.title}</td>
+                    <td className={`${LEDGER_TD} text-right font-mono`}>{i.rating ?? "—"}</td>
                     <td className={`${LEDGER_TD} text-right whitespace-nowrap capitalize`}>{i.status.replace(/_/g, " ")}</td>
+                    <td className={`${LEDGER_TD} text-right font-mono whitespace-nowrap`}>{i.createdAt ? fmtShort(toLocalDateStr(new Date(i.createdAt))) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
