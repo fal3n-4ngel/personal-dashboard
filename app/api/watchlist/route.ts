@@ -1,10 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { ApiError, toErrorResponse } from "@/lib/errors";
-import { listWatchlist, addWatchlistItem } from "@/lib/firebase";
+import { listWatchlist, addWatchlistItem, updateWatchlistItem } from "@/lib/firebase";
 import { validateNewWatchlistItem } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
+
+async function autohealWatchlistItem(session: any, id: string, item: any) {
+  let coverImage: string | null = null;
+
+  try {
+    if (item.type === "movie" || item.type === "show") {
+      const apiKey = process.env.NEXT_PUBLIC_IMDB_API_KEY;
+      if (apiKey) {
+        try {
+          const res = await fetch(
+            `https://www.omdbapi.com/?t=${encodeURIComponent(item.title)}&y=${item.year || ""}&apikey=${apiKey}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.Poster && data.Poster !== "N/A") {
+              coverImage = data.Poster;
+            }
+          }
+        } catch (e) {
+          console.error("[Autoheal] OMDb fetch failed:", e);
+        }
+      }
+
+      if (!coverImage && item.type === "show") {
+        try {
+          const res = await fetch(`https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(item.title)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.image?.medium) {
+              coverImage = data.image.medium;
+            }
+          }
+        } catch (e) {
+          console.error("[Autoheal] TVMaze fetch failed:", e);
+        }
+      }
+    } else if (item.type === "book") {
+      try {
+        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(item.title)}&limit=1`);
+        if (res.ok) {
+          const data = await res.json();
+          const doc = data.docs?.[0];
+          if (doc?.cover_i) {
+            coverImage = `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`;
+          }
+        }
+      } catch (e) {
+        console.error("[Autoheal] OpenLibrary fetch failed:", e);
+      }
+    }
+
+    if (coverImage) {
+      console.log(`[Autoheal] Found cover image for ${item.title}: ${coverImage}`);
+      await updateWatchlistItem(session, id, { coverImage });
+    }
+  } catch (err) {
+    console.error("[Autoheal] Error autohealing item:", err);
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -63,6 +122,13 @@ export async function POST(req: NextRequest) {
 
     const item = validateNewWatchlistItem(body);
     const result = await addWatchlistItem(session, item);
+
+    if (!item.coverImage) {
+      autohealWatchlistItem(session, result.id, item).catch((err) => {
+        console.error("Autohealing background error:", err);
+      });
+    }
+
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return toErrorResponse(error, "POST /api/watchlist");

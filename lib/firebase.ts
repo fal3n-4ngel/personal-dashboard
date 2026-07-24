@@ -776,6 +776,7 @@ export interface PortfolioRecord {
   id: string;
   assets: InvestmentAsset[];
   updatedAt: number;
+  valuationHistory?: Record<string, number>;
 }
 
 const PORTFOLIO_CACHE_TTL = 30_000;
@@ -805,7 +806,13 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
       createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
     }));
 
-    const record = { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0) };
+    const valHistoryRaw = data.valuationHistory && typeof data.valuationHistory === "object" ? data.valuationHistory : {};
+    const valuationHistory: Record<string, number> = {};
+    Object.entries(valHistoryRaw as Record<string, unknown>).forEach(([k, v]) => {
+      valuationHistory[k] = Number(v || 0);
+    });
+
+    const record = { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0), valuationHistory };
     await cacheSet(cacheKey, record, PORTFOLIO_CACHE_TTL);
     return record;
   } catch (err) {
@@ -821,6 +828,22 @@ export async function updatePortfolio(session: Session, assets: InvestmentAsset[
   const docData = { assets, updatedAt: Date.now() };
   const params = new URLSearchParams();
   params.append("updateMask.fieldPaths", "assets");
+  params.append("updateMask.fieldPaths", "updatedAt");
+
+  await fsFetch(session, `${docsRoot(session)}/portfolios/${session.uid}?${params}`, {
+    method: "PATCH",
+    body: JSON.stringify({ fields: toFields(docData) }),
+  });
+  await cacheInvalidate(portfolioCacheKey(session));
+}
+
+export async function updatePortfolioValuationHistory(
+  session: Session,
+  valuationHistory: Record<string, number>
+) {
+  const docData = { valuationHistory, updatedAt: Date.now() };
+  const params = new URLSearchParams();
+  params.append("updateMask.fieldPaths", "valuationHistory");
   params.append("updateMask.fieldPaths", "updatedAt");
 
   await fsFetch(session, `${docsRoot(session)}/portfolios/${session.uid}?${params}`, {

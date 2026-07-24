@@ -474,7 +474,7 @@ export default function LandingPage({
             href="#chatgpt"
             className="inline-flex items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-1.5 text-[11.5px] font-semibold text-[#1d4ed8] no-underline transition-all duration-200 hover:border-[#93c5fd] hover:bg-[#dbeafe]"
           >
-            🤖 Our flagship feature: chat with your dashboard via ChatGPT, Gemini & Claude →
+            🤖 Our flagship feature: chat with your dashboard via ChatGPT or custom AI agents →
           </a>
         </div>
         <h1 className={`${HERO_TITLE} ${HERO_REVEAL} [animation-delay:0.08s]`}>
@@ -515,7 +515,7 @@ export default function LandingPage({
           className={`mt-7 flex flex-wrap justify-center gap-2 ${HERO_REVEAL} [animation-delay:0.26s]`}
         >
           <span className="inline-flex items-center gap-[5px] rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-3 py-[5px] text-[11.5px] font-semibold text-[#1d4ed8]">
-            🤖 Custom LLM Sync (Gemini/ChatGPT)
+            🤖 Custom LLM Sync (ChatGPT &amp; AI Agents)
           </span>
           <span className="inline-flex items-center gap-[5px] rounded-full border border-[#e5e3db] bg-white px-3 py-[5px] text-[11.5px] font-medium text-[#6e6c64]">
             💸 Expense Ledger
@@ -743,7 +743,7 @@ export default function LandingPage({
                     </div>
                     <div className="min-w-0 text-left">
                       <div className={NODE_TITLE}>LLM Sync client</div>
-                      <div className={NODE_DESC}>Gemini, ChatGPT, Claude</div>
+                      <div className={NODE_DESC}>ChatGPT &amp; AI Agents</div>
                     </div>
                   </div>
                 </div>
@@ -847,37 +847,33 @@ export default function LandingPage({
               🤖 OpenAPI compliant
             </span>
             <h2 className={`${HERO_TITLE} mb-5 text-left text-[40px]`}>
-              Connect any LLM.
+              Connect ChatGPT or LLM APIs.
               <br />
               <span className="font-normal italic" style={SERIF_ITALIC_STYLE}>
-                Gemini, ChatGPT, or Claude.
+                Your data, your AI agent.
               </span>
             </h2>
             <p className={`${STEP_DESC} mb-8 max-w-[440px] text-sm`}>
-              Every route in this API exposes a clean OpenAPI spec. Import the
-              schema into Gemini Gems, ChatGPT Actions, or Claude Projects to
-              log expenses, update your watchlist, or query analytics in plain
-              English.
+              Every route in this API exposes a clean, standard OpenAPI spec. Plug the schema directly into custom ChatGPT Actions out-of-the-box, or pass it to Gemini and Claude developer APIs to perform actions in plain English.
             </p>
             <ul className="mb-8 flex list-none flex-col gap-3.5 p-0">
               <li className="flex items-start gap-3 text-sm leading-[1.5] text-[#1c1b18]">
                 <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-[11px] text-white">
                   ✓
                 </span>
-                Works with Gemini Gems, ChatGPT Custom GPTs, and Claude Projects
+                Works natively with custom ChatGPT Actions (Custom GPTs)
               </li>
               <li className="flex items-start gap-3 text-sm leading-[1.5] text-[#1c1b18]">
                 <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-[11px] text-white">
                   ✓
                 </span>
-                Use LLMs on your phone or laptop to track everything on the go
+                Ready for developer tools &amp; agent frameworks (Coze, Dify, Flowise)
               </li>
               <li className="flex items-start gap-3 text-sm leading-[1.5] text-[#1c1b18]">
                 <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#10b981] text-[11px] text-white">
                   ✓
                 </span>
-                Natural language recognition — &ldquo;I spent 400 on
-                transit&rdquo; maps instantly
+                Universal schema blueprint for Gemini &amp; Claude function calling
               </li>
             </ul>
             <a href="/assistant" className={`${HERO_CTA_PRIMARY} inline-flex`}>
@@ -1259,7 +1255,7 @@ export default function LandingPage({
                 </li>
                 <li>
                   <a href="/assistant" className={FOOTER_LINK_ITEM}>
-                    ChatGPT/Gemini Plugin
+                    ChatGPT &amp; AI Agents
                   </a>
                 </li>
               </ul>

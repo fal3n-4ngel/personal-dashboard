@@ -187,7 +187,7 @@ Always confirm what you logged in one short line, including the year you recorde
           <div className="min-w-0 flex-1">
             <h2 className="mb-1.5 text-[15px] font-semibold">Create a Custom GPT or AI Agent</h2>
             <p className="text-[13px] leading-[1.7] text-text-secondary">
-              In your preferred LLM provider (ChatGPT Explore GPTs, Gemini Gems, or Claude Projects), initiate a new custom assistant creation. Keep sharing set to <strong>Only me</strong> — this agent will hold a token to your personal data.
+              In ChatGPT (under Explore GPTs) or your preferred AI Agent builder (e.g. Coze, Dify), initiate a new custom assistant. Keep sharing set to <strong>Only me</strong> — this agent will hold a token to your personal data.
             </p>
           </div>
         </div>
@@ -198,7 +198,7 @@ Always confirm what you logged in one short line, including the year you recorde
           <div className="min-w-0 flex-1">
             <h2 className="mb-1.5 text-[15px] font-semibold">Import the API schema</h2>
             <p className="mb-3 text-[13px] leading-[1.7] text-text-secondary">
-              In your agent&apos;s developer settings under <strong>Actions</strong> or <strong>Capabilities</strong>, choose to import a schema from a URL and paste the link below. The LLM provider will discover the expense and watchlist API actions automatically.
+              In ChatGPT&apos;s agent settings under <strong>Actions</strong>, or in your developer workflow/agent platform, choose to import a schema from a URL and paste the link below. The AI provider will discover the expense and watchlist API actions automatically.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <span className={CODE_CLASS}>{schemaUrl}</span>

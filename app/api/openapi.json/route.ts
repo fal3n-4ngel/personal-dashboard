@@ -409,7 +409,7 @@ export async function GET() {
           bearerFormat: "JWT",
           description:
             "Bearer token supporting both Firebase ID tokens and Permanent API Keys. " +
-            "In ChatGPT Actions, Gemini Gems, or Claude Projects, choose Authentication → API Key → Bearer and paste your token or Permanent API Key.",
+            "In ChatGPT Actions or your custom developer AI Agent platform, choose Authentication → API Key → Bearer and paste your token or Permanent API Key.",
         },
       },
       schemas: {

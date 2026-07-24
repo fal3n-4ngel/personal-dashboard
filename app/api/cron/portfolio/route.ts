@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCredentials, parseFirebaseConfig } from "@/lib/credentials";
 import { refreshIdToken } from "@/lib/auth";
-import { getPortfolio } from "@/lib/firebase";
+import { getPortfolio, updatePortfolioValuationHistory } from "@/lib/firebase";
 import { fetchAssetPrice, getUsdToInrRate } from "@/lib/prices";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +100,44 @@ export async function POST(req: NextRequest) {
     const isGreen = overallPnl >= 0;
     const pnlColor = isGreen ? "#166534" : "#991b1b";
     const pnlBg = isGreen ? "#f0fdf4" : "#fef2f2";
+
+    // Track valuation history for yesterday and last week comparisons
+    const getIstDateString = (d: Date = new Date()) => {
+      const tzDate = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      const yyyy = tzDate.getFullYear();
+      const mm = String(tzDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(tzDate.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const todayDateStr = getIstDateString();
+    const valHistory = { ...(portfolio.valuationHistory || {}) };
+    
+    const sortedDates = Object.keys(valHistory)
+      .filter(d => d !== todayDateStr)
+      .sort((a, b) => b.localeCompare(a));
+
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const targetYesterdayStr = getIstDateString(yesterdayDate);
+    const yesterdayVal = valHistory[targetYesterdayStr] !== undefined 
+      ? valHistory[targetYesterdayStr] 
+      : (sortedDates.length > 0 ? valHistory[sortedDates[0]] : null);
+
+    const targetLastWeekStr = getIstDateString(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+    const lastWeekVal = valHistory[targetLastWeekStr] !== undefined 
+      ? valHistory[targetLastWeekStr] 
+      : (sortedDates.length > 0 ? valHistory[sortedDates[Math.min(sortedDates.length - 1, 6)]] : null);
+
+    const dailyChange = yesterdayVal !== null ? totalCurrent - yesterdayVal : 0;
+    const dailyChangePercent = yesterdayVal ? (dailyChange / yesterdayVal) * 100 : 0;
+
+    const weeklyChange = lastWeekVal !== null ? totalCurrent - lastWeekVal : 0;
+    const weeklyChangePercent = lastWeekVal ? (weeklyChange / lastWeekVal) * 100 : 0;
+
+    // Save today's valuation history
+    valHistory[todayDateStr] = totalCurrent;
+    await updatePortfolioValuationHistory(session, valHistory);
 
     // 5. Craft email HTML template matching UI styling (warm neutral, premium cream)
     const todayStr = new Date().toLocaleDateString("en-IN", {
@@ -324,6 +362,24 @@ export async function POST(req: NextRequest) {
               <td width="48%" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; padding: 16px; text-align: center;">
                 <div class="stat-label" style="font-size: 10px; font-weight: 700; color: #7c7a72; text-transform: uppercase; letter-spacing: 0.8px;">USD to INR Rate</div>
                 <div class="mini-val" style="font-size: 18px; font-weight: 700; color: #1c1b18; margin-top: 4px;">₹${usdToInr.toFixed(2)}</div>
+              </td>
+            </tr>
+            <tr style="height: 12px;"><td colspan="3"></td></tr>
+            <tr>
+              <td width="48%" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; padding: 16px; text-align: center;">
+                <div class="stat-label" style="font-size: 10px; font-weight: 700; color: #7c7a72; text-transform: uppercase; letter-spacing: 0.8px;">Today's P&L (1D)</div>
+                <div class="mini-val" style="font-size: 18px; font-weight: 700; margin-top: 4px; color: ${dailyChange >= 0 ? "#16a34a" : "#991b1b"};">
+                  ${dailyChange >= 0 ? "▲ +" : "▼ -"}₹${Math.abs(dailyChange).toLocaleString('en-IN', { maximumFractionDigits: 0 })} 
+                  <span style="font-size: 11px; font-weight: 600; color: #7c7a72; margin-left: 2px;">(${dailyChangePercent >= 0 ? "+" : ""}${dailyChangePercent.toFixed(2)}%)</span>
+                </div>
+              </td>
+              <td width="4%"></td>
+              <td width="48%" style="background-color: #fcfbfa; border: 1px solid #eae8e0; border-radius: 8px; padding: 16px; text-align: center;">
+                <div class="stat-label" style="font-size: 10px; font-weight: 700; color: #7c7a72; text-transform: uppercase; letter-spacing: 0.8px;">7-Day Change (1W)</div>
+                <div class="mini-val" style="font-size: 18px; font-weight: 700; margin-top: 4px; color: ${weeklyChange >= 0 ? "#16a34a" : "#991b1b"};">
+                  ${weeklyChange >= 0 ? "▲ +" : "▼ -"}₹${Math.abs(weeklyChange).toLocaleString('en-IN', { maximumFractionDigits: 0 })} 
+                  <span style="font-size: 11px; font-weight: 600; color: #7c7a72; margin-left: 2px;">(${weeklyChangePercent >= 0 ? "+" : ""}${weeklyChangePercent.toFixed(2)}%)</span>
+                </div>
               </td>
             </tr>
           </table>
