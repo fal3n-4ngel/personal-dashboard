@@ -196,8 +196,8 @@ async function runOwnedQuery(session: Session, collectionId: string): Promise<{ 
 
 /* ─── Expenses ─── */
 
-const EXPENSE_CACHE_TTL = 30_000;
-const WATCHLIST_CACHE_TTL = 30_000;
+const EXPENSE_CACHE_TTL = 3_600_000;
+const WATCHLIST_CACHE_TTL = 3_600_000;
 const BATCH_CONCURRENCY = 3;
 
 // Cache keys include the project id: uids are only unique within a Firebase
@@ -650,7 +650,7 @@ export async function deleteWatchlistItem(session: Session, id: string) {
 export interface SubscriptionRecord { id: string; name: string; cost: number; billingCycle: "monthly" | "yearly"; nextBillingDate: string; icon: string | null; createdAt: number; }
 export interface NoteRecord { id: string; content: string; updatedAt: number; }
 
-const SUBSCRIPTION_CACHE_TTL = 30_000;
+const SUBSCRIPTION_CACHE_TTL = 3_600_000;
 
 function subscriptionCacheKey(session: Session): string {
   return `subscriptions:${session.config.projectId}:${session.uid}`;
@@ -734,7 +734,7 @@ export async function updateSubscription(session: Session, id: string, updates: 
   await cacheInvalidate(subscriptionCacheKey(session));
 }
 
-const NOTE_CACHE_TTL = 30_000;
+const NOTE_CACHE_TTL = 3_600_000;
 function noteCacheKey(session: Session): string { return `note:${session.config.projectId}:${session.uid}`; }
 
 export async function getNote(session: Session): Promise<NoteRecord | null> {
@@ -794,7 +794,7 @@ export interface PortfolioRecord {
   valuationHistory?: Record<string, number>;
 }
 
-const PORTFOLIO_CACHE_TTL = 30_000;
+const PORTFOLIO_CACHE_TTL = 3_600_000;
 function portfolioCacheKey(session: Session): string { return `portfolio:${session.config.projectId}:${session.uid}`; }
 
 export async function getPortfolio(session: Session): Promise<PortfolioRecord | null> {
@@ -893,7 +893,7 @@ export interface DashboardSettings {
   updatedAt: number;
 }
 
-const SETTINGS_CACHE_TTL = 30_000;
+const SETTINGS_CACHE_TTL = 3_600_000;
 function settingsCacheKey(session: Session): string { return `settings:${session.config.projectId}:${session.uid}`; }
 
 export async function getSettings(session: Session): Promise<DashboardSettings | null> {
