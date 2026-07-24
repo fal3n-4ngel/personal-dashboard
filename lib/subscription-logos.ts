@@ -2,7 +2,7 @@
 // subscriptions tab can show a real brand icon without the user picking one.
 const SUB_LOGO_MAP: [RegExp, string][] = [
   [/netflix/i, "netflix.com"],
-  [/spotify/i, "spotify.com"],
+  [/spotify|sportofy/i, "spotify.com"],
   [/youtube|yt\s*premium/i, "youtube.com"],
   [/amazon\s*prime|prime\s*video/i, "amazon.com"],
   [/hotstar|disney\+?\s*hotstar/i, "hotstar.com"],
@@ -62,12 +62,10 @@ const SUB_LOGO_MAP: [RegExp, string][] = [
   [/raycast/i, "raycast.com"],
 ];
 
-const LOGO_DEV_TOKEN = process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN || "pk_abFC_FBeQnCIIvPXLpp7JA";
-
 export function getSubLogoUrl(name: string): string | null {
   for (const [pattern, domain] of SUB_LOGO_MAP) {
     if (pattern.test(name)) {
-      return `https://img.logo.dev/${domain}?token=${LOGO_DEV_TOKEN}&size=40&format=png`;
+      return `https://logo.clearbit.com/${domain}`;
     }
   }
   return null;

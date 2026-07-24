@@ -80,6 +80,9 @@ export interface InvestmentAsset {
   previousClose?: number | null;
   notes?: string;
   createdAt: number;
+  isSold?: boolean;
+  soldAt?: number;
+  soldPrice?: number;
 }
 
 export interface Note {

@@ -311,6 +311,9 @@ function validateInvestmentAsset(raw: unknown, index: number): InvestmentAsset {
       previousClose: b.previousClose !== undefined && b.previousClose !== null && b.previousClose !== "" ? asNumber(b.previousClose, "previousClose", { min: 0 }) : null,
       notes: asTrimmedString(b.notes, "notes", 1000, false),
       createdAt: typeof b.createdAt === "number" ? b.createdAt : Date.now(),
+      isSold: b.isSold !== undefined && b.isSold !== null ? Boolean(b.isSold) : undefined,
+      soldAt: b.soldAt !== undefined && b.soldAt !== null ? asNumber(b.soldAt, "soldAt", { min: 0 }) : undefined,
+      soldPrice: b.soldPrice !== undefined && b.soldPrice !== null ? asNumber(b.soldPrice, "soldPrice", { min: 0 }) : undefined,
     };
   } catch (error) {
     if (error instanceof ApiError) throw new ApiError(400, `Asset ${index + 1}: ${error.message}`);
