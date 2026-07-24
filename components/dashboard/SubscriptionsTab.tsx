@@ -18,6 +18,7 @@ interface SubscriptionsTabProps {
   isAddingSub: boolean;
   addSubscription: (e: React.FormEvent) => void;
   deleteSubscription: (id: string) => void;
+  updateSubscriptionIcon: (id: string, icon: string) => void;
   isFetchingSubscriptions: boolean;
 }
 
@@ -45,9 +46,21 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
   isAddingSub,
   addSubscription,
   deleteSubscription,
+  updateSubscriptionIcon,
   isFetchingSubscriptions,
 }) => {
   const [now] = React.useState(() => Date.now());
+  const [editingIconId, setEditingIconId] = React.useState<string | null>(null);
+  const [iconDraft, setIconDraft] = React.useState("");
+
+  const startIconEdit = (id: string, current: string | null) => {
+    setEditingIconId(id);
+    setIconDraft(current || "");
+  };
+  const commitIconEdit = (id: string) => {
+    updateSubscriptionIcon(id, iconDraft);
+    setEditingIconId(null);
+  };
 
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_cubic-bezier(0.16,1,0.3,1)_forwards]">
@@ -154,24 +167,46 @@ export const SubscriptionsTab: React.FC<SubscriptionsTabProps> = ({
                   className="flex items-center justify-between rounded-[10px] border border-border-subtle bg-bg-secondary px-3.5 py-3 transition-colors duration-150 hover:bg-bg-card"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[9px] border border-border-subtle bg-bg-card text-[17px]">
-                      {(() => {
-                        const logoUrl = getSubLogoUrl(sub.name);
-                        if (logoUrl) {
-                          return (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={logoUrl}
-                              alt={sub.name}
-                              width={28}
-                              height={28}
-                              className="rounded-[3px] object-contain"
-                            />
-                          );
-                        }
-                        return sub.icon || "💳";
-                      })()}
-                    </div>
+                    {editingIconId === sub.id ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={iconDraft}
+                        onChange={(e) => setIconDraft(e.target.value)}
+                        onBlur={() => commitIconEdit(sub.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitIconEdit(sub.id);
+                          if (e.key === "Escape") setEditingIconId(null);
+                        }}
+                        placeholder="🍿"
+                        maxLength={10}
+                        className="h-[38px] w-[38px] shrink-0 rounded-[9px] border border-border-hover bg-bg-card text-center text-[17px] outline-none focus:shadow-focus"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startIconEdit(sub.id, sub.icon)}
+                        title="Click to change icon"
+                        className="group relative flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-[9px] border border-border-subtle bg-bg-card text-[17px] transition-colors hover:border-border-hover"
+                      >
+                        {(() => {
+                          // Explicit user-set icon wins over the auto-detected
+                          // brand logo, so an edit always visibly applies.
+                          if (sub.icon) return <span>{sub.icon}</span>;
+                          const logoUrl = getSubLogoUrl(sub.name);
+                          if (logoUrl) {
+                            return (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={logoUrl} alt={sub.name} width={28} height={28} className="rounded-[3px] object-contain" />
+                            );
+                          }
+                          return <span>💳</span>;
+                        })()}
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Edit
+                        </span>
+                      </button>
+                    )}
                     <div>
                       <p className="text-[13px] font-semibold">{sub.name}</p>
                       <p className={`mt-0.5 text-[11px] ${isDueSoon ? "font-semibold text-[#b3666b]" : "font-normal text-text-muted"}`}>

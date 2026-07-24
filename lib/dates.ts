@@ -142,3 +142,23 @@ export function resolvePayCycle(
     prevEndStr: toLocalDateStr(prevEndDate),
   };
 }
+
+// Walks `count` consecutive resolved cycles backward from the one
+// containing `referenceDate` (index 0), using each cycle's own prevEndStr
+// as the next reference point — so every step benefits from the same
+// logged-payday snapping as a single resolvePayCycle() call.
+export function buildCycleHistory(
+  salaryDay: number,
+  salaryLog: Record<string, SalaryLogEntry> | undefined,
+  count: number,
+  referenceDate: Date = new Date()
+): ResolvedPayCycle[] {
+  const cycles: ResolvedPayCycle[] = [];
+  let refDate = referenceDate;
+  for (let i = 0; i < count; i++) {
+    const c = resolvePayCycle(salaryDay, salaryLog, refDate);
+    cycles.push(c);
+    refDate = new Date(`${c.prevEndStr}T00:00:00`);
+  }
+  return cycles;
+}

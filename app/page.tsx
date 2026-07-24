@@ -13,7 +13,7 @@ import {
   SearchResult,
   InvestmentQuote,
 } from "@/types";
-import { getNextFutureBillingDate, resolvePayCycle, toLocalDateStr } from "@/lib/dates";
+import { getNextFutureBillingDate, resolvePayCycle, buildCycleHistory, toLocalDateStr } from "@/lib/dates";
 import { anilistQuery } from "@/lib/anilist";
 import { traktRequest } from "@/lib/trakt-client";
 import { pushWatchlistUpdate } from "@/lib/sync-push";
@@ -106,6 +106,9 @@ export default function Dashboard() {
   // Logged paydays keyed by the payday itself — same sparse, Firestore-only
   // loading pattern.
   const [salaryLog, setSalaryLogState] = useState<Record<string, { date: string; amount: number }>>({});
+  // Pro-tier flag from settings. Server-controlled (not patchable via the
+  // API), so it only changes when set directly in Firestore.
+  const [isProUser, setIsProUser] = useState(false);
   const [activeChart, setActiveChart] = useState<"category" | "trend">("category");
   const [expenseSearch, setExpenseSearch] = useState("");
   const [ledgerCategoryFilter, setLedgerCategoryFilter] = useState("");
@@ -1075,6 +1078,7 @@ export default function Dashboard() {
         if (data.salaryLog && typeof data.salaryLog === "object") {
           setSalaryLogState(data.salaryLog);
         }
+        setIsProUser(data.isPro === true);
       }
     } catch (err) {
       console.error(err);
@@ -1239,6 +1243,88 @@ export default function Dashboard() {
       const res = await fetch(`/api/subscriptions/${id}`, { method: "DELETE", headers: getHeaders() });
       if (res.ok) setSubscriptions((prev) => prev.filter((s) => s.id !== id));
     });
+  };
+
+  const updateSubscriptionIcon = async (id: string, icon: string) => {
+    const nextIcon = icon.trim() || null;
+    // Optimistic — the icon is cosmetic, so reflect it instantly and let the
+    // PATCH catch up rather than blocking the UI on a round-trip.
+    setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, icon: nextIcon } : s)));
+    try {
+      await fetch(`/api/subscriptions/${id}`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify({ icon: nextIcon }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const updateSubscription = async (id: string, updates: Partial<Subscription>) => {
+    setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    try {
+      await fetch(`/api/subscriptions/${id}`, {
+        method: "PATCH",
+        headers: getHeaders(),
+        body: JSON.stringify(updates),
+      });
+    } catch (err) {
+      console.error(err);
+      // Rollback on failure
+      const res = await fetch("/api/subscriptions", { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSubscriptions(data.subscriptions || []);
+      }
+    }
+  };
+
+  const logSubscriptionExpense = async (sub: Subscription) => {
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          title: `${sub.name} Payment`,
+          amount: sub.cost,
+          category: sub.name.toLowerCase().includes("rent") ? "Rent" : "Subscriptions",
+          date: toLocalDateStr(new Date()),
+          notes: `Logged automatically from subscription: ${sub.name}`,
+        }),
+      });
+      if (res.ok) {
+        fetchExpenses();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const importExpensesBatch = async (items: any[]) => {
+    const chunks = [];
+    const chunkSize = 100;
+    for (let i = 0; i < items.length; i += chunkSize) {
+      chunks.push(items.slice(i, i + chunkSize));
+    }
+
+    let totalAdded = 0;
+    for (const chunk of chunks) {
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(chunk),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to import batch chunk");
+      }
+      const data = await res.json();
+      totalAdded += data.added || 0;
+    }
+
+    fetchExpenses();
+    return totalAdded;
   };
 
   /* ─── Watchlist Actions ─── */
@@ -1568,6 +1654,32 @@ export default function Dashboard() {
     });
   };
 
+  const sellInvestment = async (id: string, soldPrice: number) => {
+    const updatedList = investments.map((a) => {
+      if (a.id === id) {
+        return {
+          ...a,
+          isSold: true,
+          soldAt: Date.now(),
+          soldPrice: soldPrice,
+          amount: 0, // Market value is 0 after sale
+        };
+      }
+      return a;
+    });
+    setInvestments(updatedList);
+    const res = await fetch("/api/portfolio", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        assets: updatedList,
+      }),
+    });
+    if (res.ok) {
+      fetchInvestments();
+    }
+  };
+
 const updateMarketPrices = async () => {
     setIsUpdatingPrices(true);
     try {
@@ -1655,6 +1767,16 @@ const updateMarketPrices = async () => {
 
   const totalSpent = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amount || 0), 0), [filteredExpenses]);
 
+  // Resolved boundaries for the current cycle plus the 7 before it (index 0
+  // = current, in-progress cycle). Shared by the projection's historical
+  // baseline below and the Cycle History card, so cycle resolution and
+  // logged-payday snapping only happens once per render.
+  const CYCLE_HISTORY_DEPTH = 7;
+  const cycleHistoryRaw = useMemo(
+    () => buildCycleHistory(salaryDay, salaryLog, CYCLE_HISTORY_DEPTH),
+    [salaryDay, salaryLog]
+  );
+
   // Real pay-cycle analytics: spend so far THIS salary cycle (not a rolling
   // 30-day window, which drifts out of sync with when salary actually
   // lands), a pace-based projection for the rest of the cycle, and a
@@ -1694,19 +1816,48 @@ const updateMarketPrices = async () => {
       .filter((e) => e.date! <= prevSameDayEndStr)
       .reduce((acc, e) => acc + (e.amount || 0), 0);
 
-    // A handful of days into a cycle isn't enough data to trust a live pace
-    // projection — day 1 with one ₹200 coffee would "project" ₹6,200 for
-    // the month. Blend toward last cycle's actual total early on, shifting
-    // fully to this cycle's own pace by the end of a one-week warm-up.
+    // One or two days of data isn't enough to trust a live pace projection
+    // at all — a single lumpy once-per-cycle payment (rent, tuition) logged
+    // on day 1 would get treated as a *daily* rate and extrapolated across
+    // the whole month (₹5,000 rent → "₹158,000/cycle pace"). Ignore the
+    // live pace entirely for the first couple of days, then ramp its
+    // weight up over the following week as enough real data accumulates
+    // to average out any single lumpy expense.
+    const BLACKOUT_DAYS = 2;
     const WARMUP_DAYS = 7;
-    const paceConfidence = Math.min(1, elapsedDays / WARMUP_DAYS);
+    const paceConfidence = Math.max(0, Math.min(1, (elapsedDays - BLACKOUT_DAYS) / WARMUP_DAYS));
     const dailyPace = elapsedDays > 0 ? spentSoFar / elapsedDays : 0;
     const paceProjectedTransactional = dailyPace * totalDays;
+
+    // Prefer averaging the last few COMPLETE cycles' actual spend over
+    // leaning on only the single immediately-previous one — one unusually
+    // cheap or expensive cycle shouldn't single-handedly define "normal."
+    // Falls back to just the previous cycle when that's all the history
+    // there is (or none at all, in which case there's nothing to blend
+    // with and the live pace is used outright).
+    const HISTORY_CYCLES_FOR_BASELINE = 3;
+    const pastCyclesSpend = cycleHistoryRaw
+      .slice(1, 1 + HISTORY_CYCLES_FOR_BASELINE)
+      .map((c) => expenses.filter((e) => e.date && e.date >= c.startStr && e.date <= c.endStr).reduce((acc, e) => acc + (e.amount || 0), 0))
+      .filter((v) => v > 0);
+    const historicalBaselineTransactional =
+      pastCyclesSpend.length > 0 ? pastCyclesSpend.reduce((a, b) => a + b, 0) / pastCyclesSpend.length : prevTransactionalSpend;
+
     const projectedTransactional =
-      prevTransactionalSpend > 0
-        ? paceConfidence * paceProjectedTransactional + (1 - paceConfidence) * prevTransactionalSpend
+      historicalBaselineTransactional > 0
+        ? paceConfidence * paceProjectedTransactional + (1 - paceConfidence) * historicalBaselineTransactional
         : paceProjectedTransactional; // no prior-cycle data at all yet — nothing to blend with
-    const projectedTotalSpend = projectedTransactional + subMonthlyCost;
+
+    // Subscriptions (rent included) get logged to the expense ledger when
+    // they're actually paid, so the ledger-derived projection above already
+    // contains them — both in this cycle's pace and in the historical
+    // baseline. Adding subMonthlyCost on top would double-count every
+    // recurring bill (e.g. rent counted once as a logged expense and again
+    // as a subscription), which is what pushed expected savings negative.
+    // The one exception is a brand-new user with no ledger history at all:
+    // there the recurring commitment is the only knowable spend.
+    const hasLedgerHistory = historicalBaselineTransactional > 0 || spentSoFar > 0;
+    const projectedTotalSpend = hasLedgerHistory ? projectedTransactional : subMonthlyCost;
 
     // Prefer this cycle's logged payday amount over the persistent "usual"
     // salary figure, since the whole point of logging is to capture the
@@ -1737,6 +1888,12 @@ const updateMarketPrices = async () => {
       spentSoFar,
       subMonthlyCost,
       projectedTotalSpend,
+      // Breakdown for the UI's transparent projection formula. Recurring
+      // commitment is shown as *context* (it's already inside the ledger
+      // figures, not added on top); projectedRemaining is what's still
+      // expected to be spent between today and the end of the cycle.
+      committedSpend: subMonthlyCost,
+      projectedRemaining: Math.max(0, projectedTotalSpend - spentSoFar),
       paceConfidence,
       totalIncome,
       isSalaryLogged: loggedAmount !== null,
@@ -1748,7 +1905,47 @@ const updateMarketPrices = async () => {
       paceDeltaPct,
       cycleCatBreakdown: Object.fromEntries(Object.entries(cycleCatBreakdown).sort(([, a], [, b]) => b - a)) as Record<string, number>,
     };
-  }, [expenses, subscriptions, salaryDay, salaryLog, monthlySalary, additionalIncome]);
+  }, [expenses, subscriptions, salaryDay, salaryLog, monthlySalary, additionalIncome, cycleHistoryRaw]);
+
+  // Per-cycle income/spend/savings for each past COMPLETE cycle (excludes
+  // the current, still-in-progress one at index 0) — the visible trend
+  // behind the multi-cycle projection baseline above. Cycles with neither
+  // a logged payday nor any expenses (e.g. before you started using the
+  // app) are dropped rather than shown as a misleading "₹0 spent."
+  const cycleHistory = useMemo(() => {
+    return cycleHistoryRaw
+      .slice(1)
+      .map((c) => {
+        const cycleExpenses = expenses.filter((e) => e.date && e.date >= c.startStr && e.date <= c.endStr);
+        const transactional = cycleExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+        const spend = transactional + payCycle.subMonthlyCost;
+        const income = (c.loggedAmount ?? monthlySalary) + additionalIncome;
+        return {
+          startStr: c.startStr,
+          endStr: c.endStr,
+          income,
+          spend,
+          savings: income - spend,
+          isSalaryLogged: c.loggedAmount !== null,
+          hasData: cycleExpenses.length > 0 || c.loggedAmount !== null,
+        };
+      })
+      .filter((c) => c.hasData);
+  }, [cycleHistoryRaw, expenses, monthlySalary, additionalIncome, payCycle.subMonthlyCost]);
+
+  const cycleAverages = useMemo(() => {
+    if (cycleHistory.length === 0) return null;
+    const avgIncome = cycleHistory.reduce((a, c) => a + c.income, 0) / cycleHistory.length;
+    const avgSpend = cycleHistory.reduce((a, c) => a + c.spend, 0) / cycleHistory.length;
+    const avgSavings = avgIncome - avgSpend;
+    return {
+      avgIncome,
+      avgSpend,
+      avgSavings,
+      avgSavingsRate: avgIncome > 0 ? (avgSavings / avgIncome) * 100 : 0,
+      cycleCount: cycleHistory.length,
+    };
+  }, [cycleHistory]);
 
   const largestItem = useMemo(() => {
     if (filteredExpenses.length === 0) return null;
@@ -1808,6 +2005,7 @@ const updateMarketPrices = async () => {
         setActiveTab={setActiveTab}
         user={user}
         showInvestmentsTab={showInvestmentsTab}
+        isProUser={isProUser}
         triggerConfirm={triggerConfirm}
         firebaseAuth={firebaseAuth}
         setExpenses={setExpenses}
@@ -1838,6 +2036,7 @@ const updateMarketPrices = async () => {
         syncLetterboxd={handleLetterboxdImport}
         isSyncingLetterboxd={isImportingLetterboxd}
         showInvestmentsTab={showInvestmentsTab}
+        isProUser={isProUser}
         setShowOnboarding={setShowOnboarding}
         triggerConfirm={triggerConfirm}
         firebaseAuth={firebaseAuth}
@@ -1898,6 +2097,10 @@ const updateMarketPrices = async () => {
               isFetchingExpenses={isFetchingExpenses}
               expensesLoaded={expensesLoaded}
               subscriptions={subscriptions}
+              expenses={expenses}
+              updateSubscription={updateSubscription}
+              logSubscriptionExpense={logSubscriptionExpense}
+              importExpensesBatch={importExpensesBatch}
             />
 
             {expenseTab === "subscriptions" && (
@@ -1917,6 +2120,7 @@ const updateMarketPrices = async () => {
                 isAddingSub={isAddingSub}
                 addSubscription={addSubscription}
                 deleteSubscription={deleteSubscription}
+                updateSubscriptionIcon={updateSubscriptionIcon}
                 isFetchingSubscriptions={isFetchingSubscriptions}
               />
             )}
@@ -2016,6 +2220,7 @@ const updateMarketPrices = async () => {
             isAddingAsset={isAddingAsset}
             addInvestment={addInvestment}
             deleteInvestment={deleteInvestment}
+            sellInvestment={sellInvestment}
             isUpdatingPrices={isUpdatingPrices}
             updateMarketPrices={updateMarketPrices}
             isFetchingInvestments={isFetchingInvestments}
@@ -2025,8 +2230,8 @@ const updateMarketPrices = async () => {
           />
         )}
 
-        {/* Financial Health: income, real pay-cycle pace, savings reconciliation, wealth runway */}
-        {activeTab === "financial" && (
+        {/* Financial Health (pro-only): income, real pay-cycle pace, savings reconciliation, wealth runway */}
+        {activeTab === "financial" && isProUser && (
           <FinancialHealthTab
             currency={currency}
             investments={investments}
@@ -2041,12 +2246,14 @@ const updateMarketPrices = async () => {
             setReconciliation={setReconciliation}
             salaryLog={salaryLog}
             setSalaryLogEntry={setSalaryLogEntry}
+            cycleHistory={cycleHistory}
+            cycleAverages={cycleAverages}
           />
         )}
 
         {/* Reports: filtered CSV exports for expenses and each media type */}
         {activeTab === "reports" && (
-          <ReportsTab expenses={expenses} watchlist={watchlist} currency={currency} salaryDay={salaryDay} salaryLog={salaryLog} />
+          <ReportsTab expenses={expenses} watchlist={watchlist} investments={investments} currency={currency} salaryDay={salaryDay} salaryLog={salaryLog} />
         )}
       </main>
 

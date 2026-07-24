@@ -781,6 +781,9 @@ export interface InvestmentAsset {
   previousClose?: number | null;
   notes?: string;
   createdAt?: number;
+  isSold?: boolean;
+  soldAt?: number;
+  soldPrice?: number;
 }
 
 export interface PortfolioRecord {
@@ -816,6 +819,9 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
       previousClose: a.previousClose !== undefined && a.previousClose !== null ? Number(a.previousClose) : null,
       notes: a.notes ? String(a.notes) : undefined,
       createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
+      isSold: a.isSold !== undefined && a.isSold !== null ? Boolean(a.isSold) : undefined,
+      soldAt: a.soldAt !== undefined && a.soldAt !== null ? Number(a.soldAt) : undefined,
+      soldPrice: a.soldPrice !== undefined && a.soldPrice !== null ? Number(a.soldPrice) : undefined,
     }));
 
     const valHistoryRaw = data.valuationHistory && typeof data.valuationHistory === "object" ? data.valuationHistory : {};
@@ -879,6 +885,10 @@ export interface DashboardSettings {
   // day-of-month, since many paydays are business-day rules ("last working
   // day before the 25th") that shift month to month.
   salaryLog?: Record<string, { date: string; amount: number }>;
+  // Gates pro-only surfaces (currently the Financial Health tab). Read-only
+  // through the API — deliberately absent from validateSettingsPatch so a
+  // client can't self-grant it; set it directly in Firestore instead.
+  isPro?: boolean;
   updatedAt: number;
 }
 
@@ -915,6 +925,7 @@ export async function getSettings(session: Session): Promise<DashboardSettings |
       additionalIncome: Number(data.additionalIncome || 0),
       reconciliations,
       salaryLog,
+      isPro: data.isPro === true,
       updatedAt: Number(data.updatedAt || 0),
     };
     await cacheSet(cacheKey, record, SETTINGS_CACHE_TTL);

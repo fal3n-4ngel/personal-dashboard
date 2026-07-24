@@ -494,10 +494,10 @@ export const BooksTab: React.FC<BooksTabProps> = ({
                     e.stopPropagation();
                     deleteWatchItem(item.id);
                   }}
-                  className="absolute top-2 right-2 z-10 cursor-pointer items-center justify-center rounded-md border border-border-subtle bg-white/95 text-text-muted shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-[#fdf2f2] hover:text-[#b3666b] hover:border-[#fde2e2] active:scale-95"
+                  className="absolute top-2 right-2 z-10 flex cursor-pointer items-center justify-center rounded-md border border-border-subtle bg-white/95 p-1.5 text-text-muted shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-[#fdf2f2] hover:text-[#b3666b] hover:border-[#fde2e2] active:scale-95"
                   title="Remove book"
                 >
-                  <Trash2 className="h-3 w-3 " strokeWidth={2.5} />
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
               </div>
               <div className="flex flex-col flex-1 justify-between gap-2.5">
