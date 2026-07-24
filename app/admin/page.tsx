@@ -214,7 +214,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok) {
         setStatusMessage({
-          text: `Firestore Encryption Migration complete! Encrypted and updated ${data.migratedCount} records.`,
+          text: `Firestore Encryption Migration complete! ${data.usersProcessed} users scanned — ${data.expensesMigrated} expenses and ${data.portfoliosMigrated} portfolios encrypted.`,
           type: "success",
         });
       } else {
@@ -460,7 +460,7 @@ export default function AdminPage() {
                 <RefreshCw className="h-4.5 w-4.5" /> Database & Cache Operations
               </h3>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Management commands for database encryption and cache states.
+                Management commands for database encryption and cache states. Encryption now runs across every registered user, not just this account.
               </p>
 
               <div className="flex flex-col gap-2">
@@ -477,7 +477,7 @@ export default function AdminPage() {
                   onClick={runEncryptionMigration}
                   className="w-full flex items-center justify-center gap-2 cursor-pointer rounded-md border border-border-subtle bg-transparent text-xs font-semibold text-text-primary py-3 transition-all hover:bg-bg-primary disabled:opacity-50"
                 >
-                  <Shield className="h-4.5 w-4.5" /> {migrationLoading ? "Encrypting Records..." : "Encrypt Existing Expenses"}
+                  <Shield className="h-4.5 w-4.5" /> {migrationLoading ? "Encrypting Records..." : "Encrypt All Users' Data"}
                 </button>
               </div>
             </div>

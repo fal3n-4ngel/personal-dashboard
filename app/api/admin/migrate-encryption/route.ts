@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { listExpenses, updateExpense } from "@/lib/firebase";
+import {
+  listAllUsers,
+  adminListExpenses,
+  adminReEncryptExpense,
+  adminGetPortfolio,
+  adminUpdatePortfolioAssets,
+  adminUpdatePortfolioValuationHistory,
+} from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -9,48 +16,73 @@ export async function POST(req: NextRequest) {
     const session = await requireUser(req);
     const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "";
 
-    // Verify admin access
+    // Verify admin access — this only gates WHO can trigger the migration.
+    // The migration itself runs across every user's data via the Admin SDK,
+    // not just the calling admin's own records.
     if (!session.user.email || session.user.email !== adminEmail) {
       return NextResponse.json({ error: "Forbidden: Admin access required." }, { status: 403 });
     }
 
-    // Load all raw expenses (the listExpenses helper now automatically decrypts them,
-    // but we can query them and check their encrypted status using their raw format).
-    // Wait, let's load all expenses.
-    const expenses = await listExpenses(session);
-    let migratedCount = 0;
-    let skippedCount = 0;
+    const users = await listAllUsers();
+
+    let expensesMigrated = 0;
+    let expensesSkipped = 0;
+    let portfoliosMigrated = 0;
+    let portfoliosSkipped = 0;
     const errors: string[] = [];
 
-    // Let's re-save each expense. If we call updateExpense, the new implementation
-    // will encrypt the fields on-the-fly!
-    for (const exp of expenses) {
+    for (const user of users) {
+      // Expenses: adminListExpenses already decrypts on read (or passes
+      // through unchanged if a record was never encrypted). Re-saving every
+      // record through adminReEncryptExpense always writes it back encrypted,
+      // so this is a safe no-op for already-encrypted records and a real
+      // migration for legacy plaintext ones.
       try {
-        // We want to verify if the document in Firestore is already encrypted.
-        // But listExpenses returns the decrypted version!
-        // To be safe and fully migrate everything, we can simply re-save every document.
-        // Re-saving is completely safe: if a record was already encrypted, it will decrypt it,
-        // and re-encrypt it using the key. If it was unencrypted, it will read it raw and save it encrypted!
-        // So a full re-save acts as a perfect migration!
-        await updateExpense(session, exp.id, {
-          title: exp.title,
-          amount: exp.amount ?? 0,
-          category: exp.category || "",
-          notes: exp.notes || "",
-          date: exp.date || undefined
-        });
-        migratedCount++;
+        const expenses = await adminListExpenses(user.uid);
+        for (const exp of expenses) {
+          try {
+            await adminReEncryptExpense(user.uid, exp.id, {
+              title: exp.title,
+              amount: exp.amount,
+              category: exp.category,
+              notes: exp.notes,
+            });
+            expensesMigrated++;
+          } catch (err: any) {
+            expensesSkipped++;
+            errors.push(`expense ${exp.id} (uid ${user.uid}): ${err.message || "Unknown error"}`);
+          }
+        }
       } catch (err: any) {
-        skippedCount++;
-        errors.push(`ID ${exp.id}: ${err.message || "Unknown error"}`);
+        errors.push(`expenses list for uid ${user.uid}: ${err.message || "Unknown error"}`);
+      }
+
+      // Portfolio: same re-save-to-force-encrypt approach, applied to the
+      // single portfolio document's assets array and valuation history.
+      try {
+        const portfolio = await adminGetPortfolio(user.uid);
+        const valuationHistory = portfolio?.valuationHistory || {};
+        if (portfolio && (portfolio.assets.length > 0 || Object.keys(valuationHistory).length > 0)) {
+          if (portfolio.assets.length > 0) await adminUpdatePortfolioAssets(user.uid, portfolio.assets);
+          if (Object.keys(valuationHistory).length > 0) {
+            await adminUpdatePortfolioValuationHistory(user.uid, valuationHistory);
+          }
+          portfoliosMigrated++;
+        }
+      } catch (err: any) {
+        portfoliosSkipped++;
+        errors.push(`portfolio for uid ${user.uid}: ${err.message || "Unknown error"}`);
       }
     }
 
     return NextResponse.json({
       success: true,
-      migratedCount,
-      skippedCount,
-      errors
+      usersProcessed: users.length,
+      expensesMigrated,
+      expensesSkipped,
+      portfoliosMigrated,
+      portfoliosSkipped,
+      errors,
     });
   } catch (error: any) {
     console.error("Migration Error:", error);

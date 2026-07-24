@@ -9,9 +9,20 @@
 import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { decrypt } from "./encryption";
+import { encrypt, decrypt } from "./encryption";
 import { ApiError } from "./errors";
-import type { ExpenseRecord, SubscriptionRecord, PortfolioRecord, InvestmentAsset, WatchlistItem, DailyRecommendation } from "./firebase";
+import {
+  encryptAsset,
+  decryptAsset,
+  encryptValuationHistory,
+  decryptValuationHistory,
+  type ExpenseRecord,
+  type SubscriptionRecord,
+  type PortfolioRecord,
+  type InvestmentAsset,
+  type WatchlistItem,
+  type DailyRecommendation,
+} from "./firebase";
 
 let adminApp: App | null = null;
 
@@ -124,20 +135,50 @@ export async function adminGetPortfolio(uid: string): Promise<PortfolioRecord | 
   const doc = await db.collection("portfolios").doc(uid).get();
   if (!doc.exists) return null;
   const data = doc.data() || {};
-  const assets = Array.isArray(data.assets) ? (data.assets as InvestmentAsset[]) : [];
-  const valuationHistory =
-    data.valuationHistory && typeof data.valuationHistory === "object" ? (data.valuationHistory as Record<string, number>) : {};
+  const assetsRaw = Array.isArray(data.assets) ? (data.assets as Record<string, unknown>[]) : [];
+  const assets: InvestmentAsset[] = assetsRaw.map(decryptAsset);
+  const valHistoryRaw =
+    data.valuationHistory && typeof data.valuationHistory === "object" ? (data.valuationHistory as Record<string, unknown>) : {};
   return {
     id: uid,
     assets,
     updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : 0,
-    valuationHistory,
+    valuationHistory: decryptValuationHistory(valHistoryRaw),
   };
 }
 
 export async function adminUpdatePortfolioValuationHistory(uid: string, valuationHistory: Record<string, number>): Promise<void> {
   const db = getAdminDb();
-  await db.collection("portfolios").doc(uid).set({ valuationHistory, updatedAt: Date.now() }, { merge: true });
+  await db.collection("portfolios").doc(uid).set({ valuationHistory: encryptValuationHistory(valuationHistory), updatedAt: Date.now() }, { merge: true });
+}
+
+// Re-saves a user's portfolio assets through the same encryption used by the
+// REST write path — used by the admin encryption-migration route to force
+// any legacy plaintext holdings to be encrypted at rest.
+export async function adminUpdatePortfolioAssets(uid: string, assets: InvestmentAsset[]): Promise<void> {
+  const db = getAdminDb();
+  await db.collection("portfolios").doc(uid).set({ assets: assets.map(encryptAsset), updatedAt: Date.now() }, { merge: true });
+}
+
+// Re-encrypts and re-saves a single expense document in place — the
+// migration equivalent of updateExpense() in lib/firebase.ts, but callable
+// across every user's documents rather than just the caller's own.
+export async function adminReEncryptExpense(
+  uid: string,
+  id: string,
+  entry: { title: string; amount: number | null; category: string | null; notes: string | null }
+): Promise<void> {
+  const db = getAdminDb();
+  await db.collection("expenses").doc(id).set(
+    {
+      userId: uid,
+      title: encrypt(entry.title),
+      amount: entry.amount !== null ? encrypt(String(entry.amount)) : null,
+      category: entry.category ? encrypt(entry.category) : null,
+      notes: entry.notes ? encrypt(entry.notes) : null,
+    },
+    { merge: true }
+  );
 }
 
 export async function adminListWatchlist(uid: string): Promise<WatchlistItem[]> {

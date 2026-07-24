@@ -797,6 +797,68 @@ export interface PortfolioRecord {
 const PORTFOLIO_CACHE_TTL = 3_600_000;
 function portfolioCacheKey(session: Session): string { return `portfolio:${session.config.projectId}:${session.uid}`; }
 
+// Portfolio holdings are as sensitive as expense records (exact amounts,
+// invested capital, buy/sell prices), so they're encrypted at rest the same
+// way — encrypt() on write, decrypt() on read. decrypt()/decryptNumber() both
+// pass raw, pre-encryption values through unchanged, so older un-migrated
+// documents keep reading correctly until the admin migration re-saves them.
+function decryptNumber(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const parsed = typeof raw === "string" ? parseFloat(decrypt(raw)) : Number(raw);
+  return isNaN(parsed) ? undefined : parsed;
+}
+
+export function encryptAsset(a: InvestmentAsset): Record<string, unknown> {
+  return {
+    id: a.id,
+    name: encrypt(a.name || ""),
+    category: encrypt(a.category || "equity"),
+    amount: encrypt(String(a.amount)),
+    investedAmount: encrypt(String(a.investedAmount)),
+    quantity: a.quantity !== undefined ? encrypt(String(a.quantity)) : null,
+    buyPrice: a.buyPrice !== undefined ? encrypt(String(a.buyPrice)) : null,
+    currentPrice: a.currentPrice !== undefined ? encrypt(String(a.currentPrice)) : null,
+    previousClose: a.previousClose !== undefined && a.previousClose !== null ? encrypt(String(a.previousClose)) : null,
+    notes: a.notes ? encrypt(a.notes) : null,
+    createdAt: a.createdAt ?? null,
+    isSold: a.isSold ?? null,
+    soldAt: a.soldAt ?? null,
+    soldPrice: a.soldPrice !== undefined ? encrypt(String(a.soldPrice)) : null,
+  };
+}
+
+export function decryptAsset(a: Record<string, unknown>): InvestmentAsset {
+  const amount = decryptNumber(a.amount) ?? 0;
+  return {
+    id: String(a.id || ""),
+    name: typeof a.name === "string" ? decrypt(a.name) : String(a.name || ""),
+    category: (typeof a.category === "string" ? (decrypt(a.category) as InvestmentAsset["category"]) : undefined) || "equity",
+    amount,
+    investedAmount: decryptNumber(a.investedAmount) ?? amount,
+    quantity: decryptNumber(a.quantity),
+    buyPrice: decryptNumber(a.buyPrice),
+    currentPrice: decryptNumber(a.currentPrice),
+    previousClose: a.previousClose !== undefined && a.previousClose !== null ? decryptNumber(a.previousClose) ?? null : null,
+    notes: typeof a.notes === "string" ? decrypt(a.notes) || undefined : undefined,
+    createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
+    isSold: a.isSold !== undefined && a.isSold !== null ? Boolean(a.isSold) : undefined,
+    soldAt: a.soldAt !== undefined && a.soldAt !== null ? Number(a.soldAt) : undefined,
+    soldPrice: decryptNumber(a.soldPrice),
+  };
+}
+
+export function encryptValuationHistory(vh: Record<string, number>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [date, value] of Object.entries(vh)) out[date] = encrypt(String(value));
+  return out;
+}
+
+export function decryptValuationHistory(raw: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [date, value] of Object.entries(raw)) out[date] = decryptNumber(value) ?? 0;
+  return out;
+}
+
 export async function getPortfolio(session: Session): Promise<PortfolioRecord | null> {
   const cacheKey = portfolioCacheKey(session);
   const cached = await cacheGet<PortfolioRecord | null>(cacheKey);
@@ -806,30 +868,10 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
     const res = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/portfolios/${session.uid}`);
     const data = fromFields(res.fields || {});
     const assetsRaw = Array.isArray(data.assets) ? (data.assets as Record<string, unknown>[]) : [];
-
-    // Parse assets fields safely
-    const assets: InvestmentAsset[] = assetsRaw.map((a) => ({
-      id: String(a.id || ""),
-      name: String(a.name || ""),
-      category: (a.category || "equity") as InvestmentAsset["category"],
-      amount: Number(a.amount || 0),
-      investedAmount: Number(a.investedAmount !== undefined && a.investedAmount !== null ? a.investedAmount : (a.amount || 0)),
-      quantity: a.quantity !== undefined && a.quantity !== null ? Number(a.quantity) : undefined,
-      buyPrice: a.buyPrice !== undefined && a.buyPrice !== null ? Number(a.buyPrice) : undefined,
-      currentPrice: a.currentPrice !== undefined && a.currentPrice !== null ? Number(a.currentPrice) : undefined,
-      previousClose: a.previousClose !== undefined && a.previousClose !== null ? Number(a.previousClose) : null,
-      notes: a.notes ? String(a.notes) : undefined,
-      createdAt: a.createdAt !== undefined && a.createdAt !== null ? Number(a.createdAt) : undefined,
-      isSold: a.isSold !== undefined && a.isSold !== null ? Boolean(a.isSold) : undefined,
-      soldAt: a.soldAt !== undefined && a.soldAt !== null ? Number(a.soldAt) : undefined,
-      soldPrice: a.soldPrice !== undefined && a.soldPrice !== null ? Number(a.soldPrice) : undefined,
-    }));
+    const assets: InvestmentAsset[] = assetsRaw.map(decryptAsset);
 
     const valHistoryRaw = data.valuationHistory && typeof data.valuationHistory === "object" ? data.valuationHistory : {};
-    const valuationHistory: Record<string, number> = {};
-    Object.entries(valHistoryRaw as Record<string, unknown>).forEach(([k, v]) => {
-      valuationHistory[k] = Number(v || 0);
-    });
+    const valuationHistory = decryptValuationHistory(valHistoryRaw as Record<string, unknown>);
 
     const record = { id: session.uid, assets, updatedAt: Number(data.updatedAt || 0), valuationHistory };
     await cacheSet(cacheKey, record, PORTFOLIO_CACHE_TTL);
@@ -844,7 +886,7 @@ export async function getPortfolio(session: Session): Promise<PortfolioRecord | 
 }
 
 export async function updatePortfolio(session: Session, assets: InvestmentAsset[]) {
-  const docData = { assets, updatedAt: Date.now() };
+  const docData = { assets: assets.map(encryptAsset), updatedAt: Date.now() };
   const params = new URLSearchParams();
   params.append("updateMask.fieldPaths", "assets");
   params.append("updateMask.fieldPaths", "updatedAt");
@@ -860,7 +902,7 @@ export async function updatePortfolioValuationHistory(
   session: Session,
   valuationHistory: Record<string, number>
 ) {
-  const docData = { valuationHistory, updatedAt: Date.now() };
+  const docData = { valuationHistory: encryptValuationHistory(valuationHistory), updatedAt: Date.now() };
   const params = new URLSearchParams();
   params.append("updateMask.fieldPaths", "valuationHistory");
   params.append("updateMask.fieldPaths", "updatedAt");
