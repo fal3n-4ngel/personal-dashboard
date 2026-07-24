@@ -1680,11 +1680,32 @@ const updateMarketPrices = async () => {
       return acc + cost;
     }, 0);
 
-    // Pace-projected transactional spend for the full cycle, plus the fixed
-    // monthly-equivalent subscription cost (which isn't paced — it recurs
-    // regardless of how fast you're spending elsewhere).
+    const prevCycleExpenses = expenses.filter((e) => e.date && e.date >= prevStartStr && e.date <= prevEndStr);
+    const prevTransactionalSpend = prevCycleExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+    const prevCycleSpend = prevTransactionalSpend + subMonthlyCost;
+
+    // How much you'd spent by this same point last cycle — the "by this
+    // day last month" baseline — for an apples-to-apples pace comparison
+    // instead of comparing a partial cycle to a full one.
+    const prevSameDayEnd = new Date(`${prevStartStr}T00:00:00`);
+    prevSameDayEnd.setDate(prevSameDayEnd.getDate() + elapsedDays - 1);
+    const prevSameDayEndStr = toLocalDateStr(prevSameDayEnd);
+    const prevCycleSpendToSameDay = prevCycleExpenses
+      .filter((e) => e.date! <= prevSameDayEndStr)
+      .reduce((acc, e) => acc + (e.amount || 0), 0);
+
+    // A handful of days into a cycle isn't enough data to trust a live pace
+    // projection — day 1 with one ₹200 coffee would "project" ₹6,200 for
+    // the month. Blend toward last cycle's actual total early on, shifting
+    // fully to this cycle's own pace by the end of a one-week warm-up.
+    const WARMUP_DAYS = 7;
+    const paceConfidence = Math.min(1, elapsedDays / WARMUP_DAYS);
     const dailyPace = elapsedDays > 0 ? spentSoFar / elapsedDays : 0;
-    const projectedTransactional = dailyPace * totalDays;
+    const paceProjectedTransactional = dailyPace * totalDays;
+    const projectedTransactional =
+      prevTransactionalSpend > 0
+        ? paceConfidence * paceProjectedTransactional + (1 - paceConfidence) * prevTransactionalSpend
+        : paceProjectedTransactional; // no prior-cycle data at all yet — nothing to blend with
     const projectedTotalSpend = projectedTransactional + subMonthlyCost;
 
     // Prefer this cycle's logged payday amount over the persistent "usual"
@@ -1699,8 +1720,6 @@ const updateMarketPrices = async () => {
     const expectedSavings = totalIncome - projectedTotalSpend;
     const savingsRate = totalIncome > 0 ? (expectedSavings / totalIncome) * 100 : 0;
 
-    const prevCycleExpenses = expenses.filter((e) => e.date && e.date >= prevStartStr && e.date <= prevEndStr);
-    const prevCycleSpend = prevCycleExpenses.reduce((acc, e) => acc + (e.amount || 0), 0) + subMonthlyCost;
     const paceDeltaPct = prevCycleSpend > 0 ? ((projectedTotalSpend - prevCycleSpend) / prevCycleSpend) * 100 : null;
 
     const cycleCatBreakdown: Record<string, number> = {};
@@ -1718,12 +1737,14 @@ const updateMarketPrices = async () => {
       spentSoFar,
       subMonthlyCost,
       projectedTotalSpend,
+      paceConfidence,
       totalIncome,
       isSalaryLogged: loggedAmount !== null,
       expectedCashOnHand,
       expectedSavings,
       savingsRate,
       prevCycleSpend,
+      prevCycleSpendToSameDay,
       paceDeltaPct,
       cycleCatBreakdown: Object.fromEntries(Object.entries(cycleCatBreakdown).sort(([, a], [, b]) => b - a)) as Record<string, number>,
     };

@@ -10,12 +10,18 @@ interface PayCycle {
   spentSoFar: number;
   subMonthlyCost: number;
   projectedTotalSpend: number;
+  // 0 (start of cycle) → 1 (a week in): how much the projection trusts this
+  // cycle's own live pace vs. blending in last cycle's actual total.
+  paceConfidence: number;
   totalIncome: number;
   isSalaryLogged: boolean;
   expectedCashOnHand: number;
   expectedSavings: number;
   savingsRate: number;
   prevCycleSpend: number;
+  // What was spent by this same relative day last cycle — the direct
+  // "by this day last month" comparison.
+  prevCycleSpendToSameDay: number;
   paceDeltaPct: number | null;
   cycleCatBreakdown: Record<string, number>;
 }
@@ -203,20 +209,38 @@ export const FinancialHealthTab: React.FC<FinancialHealthTabProps> = ({
             {payCycle.paceDeltaPct === null ? (
               <p className="text-[11px] text-text-muted">No prior cycle data to compare pace against yet.</p>
             ) : (
-              <div
-                className={`flex items-center gap-2 rounded-lg border p-2.5 text-[11px] leading-relaxed ${
-                  payCycle.paceDeltaPct > 5
-                    ? "border-rose-200/50 bg-rose-50/50 text-rose-800"
-                    : payCycle.paceDeltaPct < -5
-                    ? "border-emerald-200/50 bg-emerald-50/50 text-emerald-800"
-                    : "border-border-subtle bg-bg-primary text-text-secondary"
-                }`}
-              >
-                <span>{payCycle.paceDeltaPct > 5 ? "📈" : payCycle.paceDeltaPct < -5 ? "📉" : "→"}</span>
-                <span>
-                  On pace to spend <strong>{payCycle.paceDeltaPct >= 0 ? "+" : ""}{payCycle.paceDeltaPct.toFixed(1)}%</strong> vs. last cycle
-                  (<strong>{currency}{payCycle.prevCycleSpend.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong> then).
-                </span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-text-secondary">By this day last cycle</span>
+                  <span className="font-semibold text-text-primary">
+                    {currency}{payCycle.spentSoFar.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    <span className="mx-1 font-normal text-text-muted">vs</span>
+                    {currency}{payCycle.prevCycleSpendToSameDay.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+
+                <div
+                  className={`flex items-center gap-2 rounded-lg border p-2.5 text-[11px] leading-relaxed ${
+                    payCycle.paceDeltaPct > 5
+                      ? "border-rose-200/50 bg-rose-50/50 text-rose-800"
+                      : payCycle.paceDeltaPct < -5
+                      ? "border-emerald-200/50 bg-emerald-50/50 text-emerald-800"
+                      : "border-border-subtle bg-bg-primary text-text-secondary"
+                  }`}
+                >
+                  <span>{payCycle.paceDeltaPct > 5 ? "📈" : payCycle.paceDeltaPct < -5 ? "📉" : "→"}</span>
+                  <span>
+                    On pace to spend <strong>{payCycle.paceDeltaPct >= 0 ? "+" : ""}{payCycle.paceDeltaPct.toFixed(1)}%</strong> vs. last cycle
+                    (<strong>{currency}{payCycle.prevCycleSpend.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong> then).
+                  </span>
+                </div>
+
+                {payCycle.paceConfidence < 1 && (
+                  <p className="text-[10px] leading-relaxed text-text-muted">
+                    Early in the cycle — this projection still leans on last cycle's trend ({Math.round(payCycle.paceConfidence * 100)}% weight on this
+                    cycle's own pace so far), and will shift fully to your live spending by day 7.
+                  </p>
+                )}
               </div>
             )}
           </div>
