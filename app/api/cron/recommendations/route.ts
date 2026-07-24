@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCredentials, parseFirebaseConfig } from "@/lib/credentials";
-import { refreshIdToken } from "@/lib/auth";
-import { listWatchlist, saveDailyRecommendation, DailyRecommendation } from "@/lib/firebase";
+import { listAllUsers, adminListWatchlist, adminSaveDailyRecommendation, type AdminUser } from "@/lib/firebase-admin";
+import type { DailyRecommendation } from "@/lib/firebase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const dynamic = "force-dynamic";
@@ -17,59 +16,28 @@ function getCalendarIstDate() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    // 1. Verify cron authorization
-    const authHeader = req.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+type ProcessResult = { sent: false; reason: string } | { sent: true; generated: number };
 
-    const refreshToken = process.env.CRON_REFRESH_TOKEN;
-    if (!refreshToken) {
-      return NextResponse.json({ error: "Missing CRON_REFRESH_TOKEN" }, { status: 500 });
-    }
+const TYPES: ("movie" | "show" | "anime" | "book")[] = ["movie", "show", "anime", "book"];
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
-    }
+async function processUser(user: AdminUser, geminiApiKey: string, dateStr: string): Promise<ProcessResult> {
+  const allItems = await adminListWatchlist(user.uid);
+  if (allItems.length === 0) {
+    return { sent: false, reason: "empty watchlist" };
+  }
+  const existingTitles = allItems.map((item) => item.title.toLowerCase().trim());
 
-    // 2. Exchange refresh token for fresh session
-    const creds = await getCredentials(req);
-    const config = parseFirebaseConfig(creds);
-    const { idToken, user } = await refreshIdToken(config, refreshToken);
+  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  });
 
-    const session = {
-      creds,
-      config,
-      uid: user.uid,
-      idToken,
-      user,
-    };
-
-    // 3. Fetch user's watchlist/books from Firestore
-    const allItems = await listWatchlist(session);
-    const existingTitles = allItems.map((item) => item.title.toLowerCase().trim());
-
-    // 4. Set up calendar date string in IST
-    const dateStr = getCalendarIstDate();
-
-    // 5. Initialize Gemini
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    // 6. Generate for each type: movie, show, anime, book
-    const types: ("movie" | "show" | "anime" | "book")[] = ["movie", "show", "anime", "book"];
-
-    await Promise.all(
-      types.map(async (type) => {
+  const outcomes = await Promise.all(
+    TYPES.map(async (type) => {
+      try {
         let prompt = "";
         if (type === "book") {
           const books = allItems.filter((i) => i.type === "book");
@@ -124,7 +92,7 @@ Return no other text or markdown blocks. Just the raw JSON object.
         const replyText = response.response.text();
         const geminiResult = JSON.parse(replyText.trim());
 
-        // 7. Enrichment (Quick, single-attempt lookup)
+        // Enrichment (Quick, single-attempt lookup)
         let coverImage: string | null = null;
         let score: string | null = null;
 
@@ -185,11 +153,54 @@ Return no other text or markdown blocks. Just the raw JSON object.
           date: dateStr,
         };
 
-        await saveDailyRecommendation(session, type, dateStr, payload);
-      })
-    );
+        await adminSaveDailyRecommendation(user.uid, type, dateStr, payload);
+        return true;
+      } catch (e) {
+        console.error(`[Cron Recs] Failed to generate "${type}" for uid ${user.uid}:`, e);
+        return false;
+      }
+    })
+  );
 
-    return NextResponse.json({ success: true, date: dateStr, uid: user.uid });
+  const generated = outcomes.filter(Boolean).length;
+  if (generated === 0) {
+    return { sent: false, reason: "all recommendation types failed" };
+  }
+  return { sent: true, generated };
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    // 1. Verify cron authorization
+    const authHeader = req.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      return NextResponse.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
+    }
+
+    const dateStr = getCalendarIstDate();
+
+    // 2. Fan out across every registered user via Admin SDK.
+    const users = await listAllUsers();
+
+    const results: { uid: string; email: string; sent: boolean; reason?: string; error?: string }[] = [];
+    for (const user of users) {
+      try {
+        const outcome = await processUser(user, geminiApiKey, dateStr);
+        results.push({ uid: user.uid, email: user.email, sent: outcome.sent, reason: outcome.sent ? undefined : outcome.reason });
+      } catch (err: any) {
+        console.error(`Error in cron/recommendations for uid ${user.uid}:`, err);
+        results.push({ uid: user.uid, email: user.email, sent: false, error: err.message || "Unknown error" });
+      }
+    }
+
+    const processedCount = results.filter((r) => r.sent).length;
+    return NextResponse.json({ success: true, date: dateStr, usersProcessed: users.length, usersGenerated: processedCount, results });
   } catch (error: any) {
     console.error("[Cron Recs Error]:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

@@ -14,6 +14,7 @@
     "@upstash/redis": "^1.38.0",
     "@vercel/flags": "^3.1.1",
     "firebase": "^12.16.0",
+    "firebase-admin": "^14.2.0",
     "flags": "^4.2.1",
     "lucide-react": "^1.25.0",
     "next": "16.2.10",
