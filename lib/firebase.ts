@@ -125,6 +125,7 @@ interface RunQueryRow {
 
 function toValue(v: unknown): FirestoreValue {
   if (v === null || v === undefined) return { nullValue: null };
+  if (v instanceof Date) return { timestampValue: v.toISOString() };
   if (typeof v === "string") return { stringValue: v };
   if (typeof v === "boolean") return { booleanValue: v };
   if (typeof v === "number") {
@@ -964,26 +965,30 @@ export interface DailyRecommendation {
   date: string;
 }
 
-const RECOMMENDATIONS_CACHE_TTL = 3600; // 1 hour
-function recommendationsCacheKey(session: Session): string {
-  return `recommendations:${session.config.projectId}:${session.uid}`;
+const RECOMMENDATIONS_CACHE_TTL = 3_600_000; // 1 hour in ms
+function recommendationCacheKey(session: Session, type: string, date: string): string {
+  return `recommendation:${session.config.projectId}:${session.uid}:${type}:${date}`;
 }
 
-export async function getDailyRecommendations(session: Session): Promise<Record<string, DailyRecommendation>> {
-  const cacheKey = recommendationsCacheKey(session);
-  const cached = await cacheGet<Record<string, DailyRecommendation>>(cacheKey);
+export async function getDailyRecommendation(
+  session: Session,
+  type: string,
+  date: string
+): Promise<DailyRecommendation | null> {
+  const cacheKey = recommendationCacheKey(session, type, date);
+  const cached = await cacheGet<DailyRecommendation>(cacheKey);
   if (cached !== undefined && cached !== null) return cached;
 
   try {
-    const snap = await fsFetch<FirestoreDocument>(session, `${docsRoot(session)}/recommendations/${session.uid}`);
-    const data = (fromFields(snap.fields || {}).items as Record<string, DailyRecommendation>) || {};
+    const docPath = `${docsRoot(session)}/recommendations/${session.uid}/entries/${type}_${date}`;
+    const snap = await fsFetch<FirestoreDocument>(session, docPath);
+    const data = fromFields(snap.fields || {}) as unknown as DailyRecommendation;
     await cacheSet(cacheKey, data, RECOMMENDATIONS_CACHE_TTL);
     return data;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
-      const empty = {};
-      await cacheSet(cacheKey, empty, RECOMMENDATIONS_CACHE_TTL);
-      return empty;
+      await cacheSet(cacheKey, null, RECOMMENDATIONS_CACHE_TTL);
+      return null;
     }
     throw error;
   }
@@ -991,21 +996,28 @@ export async function getDailyRecommendations(session: Session): Promise<Record<
 
 export async function saveDailyRecommendation(
   session: Session,
-  key: string,
+  type: string,
+  date: string,
   recommendation: DailyRecommendation
-) {
-  const current = await getDailyRecommendations(session);
-  current[key] = recommendation;
-
-  const url = `${docsRoot(session)}/recommendations/${session.uid}`;
-  const body = {
-    fields: toFields({ items: current }),
+): Promise<void> {
+  const cacheKey = recommendationCacheKey(session, type, date);
+  
+  // Add expireAt: now + 90 days as a Firestore Timestamp
+  const expireAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+  const docData = {
+    ...recommendation,
+    expireAt,
   };
 
-  await fsFetch(session, url, {
+  const docPath = `${docsRoot(session)}/recommendations/${session.uid}/entries/${type}_${date}`;
+  const body = {
+    fields: toFields(docData),
+  };
+
+  await fsFetch(session, docPath, {
     method: "PATCH",
     body: JSON.stringify(body),
   });
-  
-  await cacheInvalidate(recommendationsCacheKey(session));
+
+  await cacheSet(cacheKey, docData as unknown as DailyRecommendation, RECOMMENDATIONS_CACHE_TTL);
 }

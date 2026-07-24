@@ -185,8 +185,7 @@ Return no other text or markdown blocks. Just the raw JSON object.
           date: dateStr,
         };
 
-        const key = `${type}_${dateStr}`;
-        await saveDailyRecommendation(session, key, payload);
+        await saveDailyRecommendation(session, type, dateStr, payload);
       })
     );
 
